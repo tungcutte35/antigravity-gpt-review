@@ -30,13 +30,9 @@ const path = require('path');
     await chatPage.bringToFront();
 
     if (forceNewChat) {
-        console.log('[2] Flag --new-chat detected. Clicking "Đoạn chat mới" button...');
-        await chatPage.evaluate(() => {
-            const btns = Array.from(document.querySelectorAll('a, button'));
-            const newBtn = btns.find(b => b.innerText && (b.innerText.includes('Đoạn chat mới') || b.innerText.includes('New chat')));
-            if (newBtn) newBtn.click();
-        });
-        await chatPage.waitForTimeout(2500);
+        console.log('[2] Forcing a completely new chat by navigating to root...');
+        await chatPage.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded' });
+        await chatPage.waitForTimeout(4000); // Wait for the new chat UI to fully mount
     } else {
         console.log('[2] Reusing current active ChatGPT chat session...');
     }
@@ -53,8 +49,17 @@ const path = require('path');
     console.log('[4] Typing and sending PR Diff into current session...');
     const textarea = chatPage.locator(textareaSelector);
     await textarea.click();
-    await textarea.fill(promptText);
-    await chatPage.waitForTimeout(500);
+    
+    // Using execCommand to bypass React freeze on huge text insertions
+    await chatPage.evaluate(([selector, text]) => {
+        const el = document.querySelector(selector);
+        el.focus();
+        document.execCommand('insertText', false, text);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+    }, [textareaSelector, promptText]);
+    
+    await chatPage.waitForTimeout(1500);
 
     const sendButton = chatPage.locator('button[data-testid="send-button"]');
     if (await sendButton.count() > 0 && await sendButton.isVisible()) {
@@ -75,7 +80,7 @@ const path = require('path');
     }
 
     // Dynamic wait for response generation to complete
-    await chatPage.waitForTimeout(25000);
+    await chatPage.waitForTimeout(45000);
 
     console.log('[6] Reading response...');
     const assistantMessages = chatPage.locator(assistantSelector);

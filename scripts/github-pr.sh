@@ -61,10 +61,8 @@ fi
 echo "    PR #${PR_NUMBER}: ${PR_URL}"
 echo "    Commit SHA: ${COMMIT_SHA}"
 
-echo "[2] Fetching PR diff & changed files..."
-DIFF_TEXT=$(curl -s "https://api.github.com/repos/$OWNER/$REPO_NAME/pulls/$PR_NUMBER" \
-    -H "Authorization: Bearer $TOKEN" \
-    -H "Accept: application/vnd.github.diff")
+echo "[2] Fetching PR metadata..."
+DIFF_TEXT="(Please use your GitHub plugin/tool to read the diff for PR: $PR_URL or review the recent changes. The PR is on branch $BRANCH at commit $COMMIT_SHA)"
 
 CHANGED_FILES=$(git diff --name-only origin/$BASE_BRANCH...$BRANCH 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null || echo "See diff below")
 
