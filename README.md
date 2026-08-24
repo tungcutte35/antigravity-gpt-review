@@ -44,7 +44,7 @@ Hệ thống áp dụng bộ tiêu chuẩn review 5 bước (5 Phases) cực k�
 
 ## 🛠️ Yêu Cầu Cài Đặt (Prerequisites)
 
-- **Node.js** (>= 16.x)
+- **Node.js** (>= 20.x)
 - **Google Chrome** (được cấu hình mở port remote debugging `9222`)
 - **GitHub CLI (`gh`)** hoặc **Git Credential Manager** đã được thiết lập.
 - **Bash** (Linux/macOS) hoặc **PowerShell** (Windows)
