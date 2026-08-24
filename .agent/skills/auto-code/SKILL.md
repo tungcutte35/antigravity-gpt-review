@@ -1,6 +1,7 @@
 ---
 name: auto-code
 description: Quy trình tự động hóa lập trình sử dụng Chrome CDP cá nhân, Production Review Pipeline v2 (5 Phases, Evidence Gate, Deduplication, Benchmarks) và vòng lặp tự động sửa code.
+author: tungcutte35
 version: 3.0.0
 triggers:
   - /auto-code

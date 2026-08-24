@@ -2,6 +2,8 @@
 
 Hệ thống tự động hóa lập trình và **Production Review Pipeline v2** (5 Phases, Evidence Gate, Root Cause Grouping, và Benchmark Suite) sử dụng ChatGPT Web (qua Chrome CDP) và GitHub PR Manager.
 
+**👤 Tác giả**: [tungcutte35](https://github.com/tungcutte35)
+
 ---
 
 ## 🏗️ Kiến trúc Production Review Pipeline v2
@@ -28,7 +30,7 @@ Hệ thống tự động hóa lập trình và **Production Review Pipeline v2*
 
 1. **Evidence Gate**: Mỗi finding bắt buộc phải có chuỗi gọi hàm / chuỗi biến đổi state làm bằng chứng (`Evidence: handleClose() -> abort() -> verify()`). Không có bằng chứng ➔ Không xuất finding.
 2. **Root Cause Grouping**: Gom các biểu hiện lỗi rải rác trên nhiều file về 1 finding duy nhất theo nguyên nhân gốc.
-3. **Review Quality Benchmarks**: Đo lường định lượng tỷ lệ **Recall, Precision và Finding Stability** thông qua thư mục `benchmarks/`.
+3. **Review Quality Benchmarks**: Đo lường định lượng tỷ lệ **Recall, Precision và Finding Stability**.
 
 ---
 
