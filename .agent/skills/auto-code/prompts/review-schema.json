@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CodeReviewResult",
+  "type": "object",
+  "required": ["status", "severity_summary", "issues", "tests_required"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["APPROVED", "CHANGES_REQUIRED", "BLOCKED"]
+    },
+    "severity_summary": {
+      "type": "object",
+      "required": ["critical", "high", "medium", "low"],
+      "properties": {
+        "critical": { "type": "integer" },
+        "high": { "type": "integer" },
+        "medium": { "type": "integer" },
+        "low": { "type": "integer" }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "file", "line", "severity", "category", "description", "action"],
+        "properties": {
+          "id": { "type": "string", "example": "SEC-001" },
+          "file": { "type": "string", "example": "internal/auth/service.go" },
+          "line": { "type": "integer", "example": 142 },
+          "severity": {
+            "type": "string",
+            "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+          },
+          "category": {
+            "type": "string",
+            "enum": ["SECURITY", "CONCURRENCY", "PERFORMANCE", "CORRECTNESS", "CLEAN_CODE", "ERROR_HANDLING", "TESTING"]
+          },
+          "description": { "type": "string" },
+          "action": { "type": "string" }
+        }
+      }
+    },
+    "tests_required": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

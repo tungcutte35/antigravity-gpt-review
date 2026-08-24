@@ -1,0 +1,43 @@
+name: auto-code
+version: 1.0.0
+description: Configuration for Antigravity Autonomous Code & Review Loop
+
+orchestrator:
+  max_review_rounds: 5
+  max_auto_fix_rounds: 3
+  max_local_test_attempts: 3
+  stop_on_human_intervention_required: true
+
+quality_gates:
+  build_required: true
+  unit_tests_required: true
+  integration_tests_required: true
+  lint_required: true
+  typecheck_required: true
+  allowed_severities_to_pass:
+    - LOW
+    - INFO
+  blocked_severities:
+    - CRITICAL
+    - HIGH
+    - MEDIUM
+
+reviewer_adapter:
+  default_provider: compact-patch-chatgpt-web
+  mode: compact_patch
+  supported_providers:
+    - compact-patch-chatgpt-web
+    - pr-url-chatgpt-web
+    - api-adapter
+  timeout_seconds: 300
+
+git:
+  auto_create_pr: false
+  auto_push_fix_commits: true
+  commit_style: conventional
+
+policies:
+  domain: go-backend
+  checklists:
+    - policies/go-backend-checklist.md
+    - policies/quality-gates.md
