@@ -1,4 +1,9 @@
-node_modules/
-.DS_Store
-*.log
+# Generated review artifacts (MUST NOT be tracked by git)
+pr_raw_diff.txt
 pr_review_prompt.txt
+gpt_review_response.txt
+claude_review_response.txt
+test-dual-pr.lock
+
+# Node
+node_modules/
