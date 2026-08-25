@@ -49,7 +49,7 @@ process.on('uncaughtException', (err) => { cleanupLock(); throw err; });
         console.log(`[+] Attempt ${attempts}: Running ChatGPT Stage 1 Review...`);
         gptResult = await runGptReview({
           diffFilePath,
-          forceNewChat: true,
+          forceNewChat: false,
           outputFile: 'gpt_review_response.txt'
         });
         console.log(`[Stage 1 Complete] ChatGPT Status: ${gptResult.status}\n`);
