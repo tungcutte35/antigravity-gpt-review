@@ -89,7 +89,8 @@ async function runGptReview(options = {}) {
   await chatPage.waitForSelector(textareaSelector, { state: 'visible', timeout: 15000 });
   
   const assistantSelector = '[data-message-author-role="assistant"]';
-  const beforeCount = await chatPage.locator(assistantSelector).count();
+  const assistantMessages = chatPage.locator(assistantSelector);
+  const beforeCount = await assistantMessages.count();
 
   console.log('[4] Typing and sending PR Diff into ChatGPT session...');
   const textarea = chatPage.locator(textareaSelector);
@@ -176,7 +177,6 @@ async function runGptReview(options = {}) {
   }
 
   console.log('[6] Reading response...');
-  const assistantMessages = chatPage.locator(assistantSelector);
   const count = await assistantMessages.count();
   
   if (count <= beforeCount) {
