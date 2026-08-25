@@ -122,6 +122,11 @@ async function runGptReview(options = {}) {
   await chatPage.keyboard.press('Backspace');
   await chatPage.waitForTimeout(1000);
 
+  let lastAssistantBefore = null;
+  if (await assistantMessages.count() > 0) {
+    lastAssistantBefore = await assistantMessages.last().innerText();
+  }
+
   const sendBtnSelectors = [
     'button[data-testid="send-button"]',
     'button[aria-label*="Send"]',
@@ -152,29 +157,31 @@ async function runGptReview(options = {}) {
 
   for (let i = 0; i < 90; i++) {
     await chatPage.waitForTimeout(2000);
-    const currentCount = await assistantMessages.count();
+    const currentMessage = chatPage.locator(assistantSelector).last();
+    if (await currentMessage.count() === 0) continue;
     
-    if (currentCount > beforeCount) {
-      const currentMessage = assistantMessages.nth(currentCount - 1);
-      const currentText = await currentMessage.innerText();
-      
-      if (currentText === lastText && currentText.trim().length > 0) {
-        stableCount++;
-        console.log(`[+] Text stable for ${stableCount * 2}s (length: ${currentText.length})`);
-        if (stableCount >= 3) { // 6 seconds of no text change
-          console.log('[+] Assistant response stabilized, generation complete.');
-          generationComplete = true;
-          break;
-        }
-      } else {
-        if (currentText !== lastText) {
-          console.log(`[-] Text changing... (length: ${currentText.length})`);
-        }
-        lastText = currentText;
-        stableCount = 0;
+    const currentText = await currentMessage.innerText();
+    
+    // If the last message is still the old one, keep waiting
+    if (currentText === lastAssistantBefore && lastAssistantBefore !== null) {
+      console.log(`[-] Waiting for new assistant message to appear...`);
+      continue;
+    }
+    
+    if (currentText === lastText && currentText.trim().length > 0) {
+      stableCount++;
+      console.log(`[+] Text stable for ${stableCount * 2}s (length: ${currentText.length})`);
+      if (stableCount >= 3) { // 6 seconds of no text change
+        console.log('[+] Assistant response stabilized, generation complete.');
+        generationComplete = true;
+        break;
       }
     } else {
-      console.log(`[-] Waiting for new message... (current: ${currentCount}, before: ${beforeCount})`);
+      if (currentText !== lastText) {
+        console.log(`[-] Text changing... (length: ${currentText.length})`);
+      }
+      lastText = currentText;
+      stableCount = 0;
     }
   }
 
@@ -183,37 +190,25 @@ async function runGptReview(options = {}) {
   }
 
   console.log('[6] Reading response...');
-  const count = await assistantMessages.count();
   
-  if (count <= beforeCount) {
-    throw new Error('No new GPT response generated for this review (timeout or generation failed).');
+  const resultText = await chatPage.locator(assistantSelector).last().innerText();
+  console.log('\n--- GPT RESPONSE ---\n' + resultText + '\n--------------------\n');
+  
+  if (outputFile) {
+    const resolvedOutputPath = path.resolve(outputFile);
+    fs.writeFileSync(resolvedOutputPath, resultText, 'utf-8');
+    console.log(`[+] Saved GPT Response to: ${resolvedOutputPath}`);
   }
 
-  const targetIndex = count - 1;
+  // Parse the LAST occurrence of the verdict to avoid false-positives from inline examples
+  const matches = [...resultText.matchAll(/^REVIEW_STATUS:\s*(APPROVED|CHANGES_REQUESTED)\s*$/igm)];
+  const status = matches.length > 0 ? matches[matches.length - 1][1].toUpperCase() : 'UNKNOWN';
 
-  if (targetIndex >= 0) {
-    const lastMessage = assistantMessages.nth(targetIndex);
-    const resultText = await lastMessage.innerText();
-    console.log('\n--- GPT RESPONSE ---\n' + resultText + '\n--------------------\n');
-    
-    if (outputFile) {
-      const resolvedOutputPath = path.resolve(outputFile);
-      fs.writeFileSync(resolvedOutputPath, resultText, 'utf-8');
-      console.log(`[+] Saved GPT Response to: ${resolvedOutputPath}`);
-    }
-
-    // Parse the LAST occurrence of the verdict to avoid false-positives from inline examples
-    const matches = [...resultText.matchAll(/^REVIEW_STATUS:\s*(APPROVED|CHANGES_REQUESTED)\s*$/igm)];
-    const status = matches.length > 0 ? matches[matches.length - 1][1].toUpperCase() : 'UNKNOWN';
-
-    return {
-      status,
-      resultText,
-      browser
-    };
-  } else {
-    throw new Error('Could not find assistant message in ChatGPT.');
-  }
+  return {
+    status,
+    resultText,
+    browser
+  };
 }
 
 module.exports = { runGptReview };
