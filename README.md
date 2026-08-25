@@ -115,8 +115,10 @@ Script Node.js kết nối với trình duyệt đang mở ở cổng `9222`:
   ```
   *Luồng Dual-Stage:*
   1. ChatGPT tiến hành review lớp 1 và lưu kết quả vào `gpt_review_response.txt`.
-  2. Toàn bộ diff + kết quả của ChatGPT được gửi sang **Claude Web (`https://claude.ai/new`)** để thẩm định lại (Verification & Consensus Gate).
+  2. Kết quả review của ChatGPT + compact PR metadata được gửi sang **Claude Web (`https://claude.ai/new`)** để thẩm định lại (Verification & Consensus Gate).
   3. **Claude.ai đưa ra VERDICT cuối cùng (`APPROVED` hoặc `CHANGES_REQUESTED`)**.
+
+  > **Lưu ý:** Claude chỉ nhận GPT review response + compact PR metadata. Claude **KHÔNG** nhận `pr_raw_diff.txt` hay full diff để tránh làm đơ trình duyệt.
 
 ---
 
