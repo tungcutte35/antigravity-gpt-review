@@ -9,6 +9,13 @@ const { runClaudeReview } = require('./test-claude-pr');
     const diffFilePath = args.find(a => !a.startsWith('--')) || 'pr_review_prompt.txt';
     const forceNewChat = args.includes('--new-chat');
 
+    const gptOutputFile = path.resolve('gpt_review_response.txt');
+    const claudeOutputFile = path.resolve('claude_review_response.txt');
+
+    // Clean up stale files before running
+    if (fs.existsSync(gptOutputFile)) fs.unlinkSync(gptOutputFile);
+    if (fs.existsSync(claudeOutputFile)) fs.unlinkSync(claudeOutputFile);
+
     console.log('==================================================');
     console.log('🚀 DUAL-STAGE REVIEW PIPELINE: ChatGPT -> Claude.ai');
     console.log('==================================================\n');
@@ -17,7 +24,7 @@ const { runClaudeReview } = require('./test-claude-pr');
     console.log('STAGE 1: ChatGPT First-Pass Code Review');
     console.log('--------------------------------------------------');
     
-    let gptResult;
+    let gptResult = null;
     try {
       gptResult = await runGptReview({
         diffFilePath,
@@ -36,7 +43,8 @@ const { runClaudeReview } = require('./test-claude-pr');
 
     const claudeResult = await runClaudeReview({
       diffFilePath,
-      gptResponseFilePath: 'gpt_review_response.txt',
+      gptResponseText: gptResult ? gptResult.resultText : '',
+      gptResponseFilePath: gptResult ? 'gpt_review_response.txt' : null,
       outputFile: 'claude_review_response.txt',
       forceNewChat: true
     });
