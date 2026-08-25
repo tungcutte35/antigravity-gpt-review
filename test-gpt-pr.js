@@ -5,27 +5,34 @@ const { execSync } = require('child_process');
 const http = require('http');
 
 async function ensureCdpRunning() {
-  return new Promise((resolve) => {
-    const req = http.get('http://127.0.0.1:9222/json/version', (res) => {
-      resolve(true);
-    });
-    req.on('error', () => {
-      console.log('[!] CDP port 9222 not active. Auto-launching Chrome CDP...');
-      try {
-        const isWin = process.platform === 'win32';
-        const scriptPath = path.resolve(__dirname, 'scripts', isWin ? 'test-cdp.ps1' : 'test-cdp.sh');
-        if (isWin) {
-          execSync(`powershell -ExecutionPolicy Bypass -File "${scriptPath}"`, { stdio: 'inherit' });
-        } else {
-          execSync(`bash "${scriptPath}"`, { stdio: 'inherit' });
-        }
-      } catch (e) {
-        console.error('[-] Failed to auto-launch Chrome CDP script:', e.message);
-      }
-      resolve(false);
-    });
+  const checkPort = () => new Promise((resolve) => {
+    const req = http.get('http://127.0.0.1:9222/json/version', () => resolve(true));
+    req.on('error', () => resolve(false));
     req.end();
   });
+
+  if (await checkPort()) return true;
+
+  console.log('[!] CDP port 9222 not active. Auto-launching Chrome CDP...');
+  try {
+    const isWin = process.platform === 'win32';
+    const scriptPath = path.resolve(__dirname, 'scripts', isWin ? 'test-cdp.ps1' : 'test-cdp.sh');
+    if (isWin) {
+      execSync(`powershell -ExecutionPolicy Bypass -File "${scriptPath}"`, { stdio: 'inherit' });
+    } else {
+      execSync(`bash "${scriptPath}"`, { stdio: 'inherit' });
+    }
+  } catch (e) {
+    console.error('[-] Failed to auto-launch Chrome CDP script:', e.message);
+  }
+
+  console.log('[*] Polling for CDP readiness...');
+  for (let i = 0; i < 30; i++) {
+    await new Promise(r => setTimeout(r, 500));
+    if (await checkPort()) return true;
+  }
+  
+  throw new Error('CDP port 9222 did not become ready in time.');
 }
 
 async function runGptReview(options = {}) {
@@ -174,9 +181,9 @@ async function runGptReview(options = {}) {
       console.log(`[+] Saved GPT Response to: ${resolvedOutputPath}`);
     }
 
-    // Securely parse the FIRST occurrence of the verdict to avoid false-positives from inline examples
-    const match = resultText.match(/(?:REVIEW_STATUS|Verdict|Final):\s*(APPROVED|CHANGES_REQUESTED|UNKNOWN)/i);
-    const status = match ? match[1].toUpperCase() : 'UNKNOWN';
+    // Parse the LAST occurrence of the verdict to avoid false-positives from inline examples
+    const matches = [...resultText.matchAll(/^REVIEW_STATUS:\s*(APPROVED|CHANGES_REQUESTED)\s*$/igm)];
+    const status = matches.length > 0 ? matches[matches.length - 1][1].toUpperCase() : 'UNKNOWN';
 
     return {
       status,

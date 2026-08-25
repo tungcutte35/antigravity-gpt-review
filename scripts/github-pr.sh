@@ -70,7 +70,19 @@ echo "    Commit SHA: ${COMMIT_SHA}"
 
 echo "[2] Building minimal GPT review prompt (metadata only)..."
 # GPT reads the PR itself via GitHub plugin — only send metadata
-printf 'Repository: %s\n' "$OWNER/$REPO_NAME" > pr_review_prompt.txt
+cat << 'EOF' > pr_review_prompt.txt
+Please review this PR. You must follow the Output Requirements below:
+1. Review the code according to our guidelines.
+2. At the VERY END of your response, output EXACTLY one of the following lines based on your verdict:
+REVIEW_STATUS: APPROVED
+or
+REVIEW_STATUS: CHANGES_REQUESTED
+
+Do not put REVIEW_STATUS anywhere else in your response to avoid confusing the parser.
+
+EOF
+
+printf 'Repository: %s\n' "$OWNER/$REPO_NAME" >> pr_review_prompt.txt
 printf 'Pull Request: %s\n' "$PR_URL" >> pr_review_prompt.txt
 printf 'Commit SHA: %s\n' "$COMMIT_SHA" >> pr_review_prompt.txt
 printf 'Branch: %s\n' "$BRANCH" >> pr_review_prompt.txt
