@@ -26,8 +26,7 @@ Start-Process -FilePath $chromePath -ArgumentList @(
     "--hide-crash-restore-bubble",
     "--disable-infobars",
     "--no-default-browser-check",
-    "https://chatgpt.com",
-    "https://claude.ai/new"
+    "https://chatgpt.com"
 )
 
 Write-Host "[3] Waiting 5 seconds for Chrome to start..."

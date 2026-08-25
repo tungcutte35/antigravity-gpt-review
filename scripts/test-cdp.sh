@@ -39,8 +39,7 @@ else
         --hide-crash-restore-bubble \
         --disable-infobars \
         --no-default-browser-check \
-        "https://chatgpt.com" \
-        "https://claude.ai/new" </dev/null >/dev/null 2>&1 &
+        "https://chatgpt.com" </dev/null >/dev/null 2>&1 &
     
     echo "[3] Waiting 4 seconds for Chrome to start..."
     sleep 4
