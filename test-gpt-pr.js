@@ -9,6 +9,10 @@ async function ensureCdpRunning() {
     const req = http.get('http://127.0.0.1:9222/json/version', (res) => {
       resolve(res.statusCode === 200);
     });
+    req.setTimeout(1500, () => {
+      req.destroy();
+      resolve(false);
+    });
     req.on('error', () => resolve(false));
     req.end();
   });

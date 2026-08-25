@@ -1,0 +1,545 @@
+commit 090afd3976f6a3842e2d766755ce651fef063309
+Author: tungcutte35 <tungcutte35@users.noreply.github.com>
+Date:   Tue Aug 25 15:20:17 2026 +0700
+
+    fix: robust CDP startup polling, enforce GPT output format, and parse final verdict
+
+diff --git a/scripts/github-pr.sh b/scripts/github-pr.sh
+index 4cd8fec..4903244 100755
+--- a/scripts/github-pr.sh
++++ b/scripts/github-pr.sh
+@@ -70,7 +70,19 @@ echo "    Commit SHA: ${COMMIT_SHA}"
+ 
+ echo "[2] Building minimal GPT review prompt (metadata only)..."
+ # GPT reads the PR itself via GitHub plugin — only send metadata
+-printf 'Repository: %s\n' "$OWNER/$REPO_NAME" > pr_review_prompt.txt
++cat << 'EOF' > pr_review_prompt.txt
++Please review this PR. You must follow the Output Requirements below:
++1. Review the code according to our guidelines.
++2. At the VERY END of your response, output EXACTLY one of the following lines based on your verdict:
++REVIEW_STATUS: APPROVED
++or
++REVIEW_STATUS: CHANGES_REQUESTED
++
++Do not put REVIEW_STATUS anywhere else in your response to avoid confusing the parser.
++
++EOF
++
++printf 'Repository: %s\n' "$OWNER/$REPO_NAME" >> pr_review_prompt.txt
+ printf 'Pull Request: %s\n' "$PR_URL" >> pr_review_prompt.txt
+ printf 'Commit SHA: %s\n' "$COMMIT_SHA" >> pr_review_prompt.txt
+ printf 'Branch: %s\n' "$BRANCH" >> pr_review_prompt.txt
+
+commit ba9ff4f361081d88003436fb7ebf4745a2a7b94a
+Author: tungcutte35 <tungcutte35@users.noreply.github.com>
+Date:   Tue Aug 25 15:07:54 2026 +0700
+
+    fix: speed up GPT wait time and add diff truncation warning
+
+diff --git a/scripts/github-pr.sh b/scripts/github-pr.sh
+index 472fa2b..4cd8fec 100755
+--- a/scripts/github-pr.sh
++++ b/scripts/github-pr.sh
+@@ -96,7 +96,7 @@ if [ "$PR_NUMBER" = "LOCAL" ]; then
+     TRUNCATION_NOTE=""
+     if [ "$TOTAL_DIFF_LINES" -gt "$MAX_DIFF_LINES" ]; then
+         REMAINING=$((TOTAL_DIFF_LINES - MAX_DIFF_LINES))
+-        TRUNCATION_NOTE="[TRUNCATED: $REMAINING more lines not shown. Full diff saved in pr_raw_diff.txt]"
++        TRUNCATION_NOTE="[TRUNCATED: $REMAINING more lines not shown. Full diff saved in pr_raw_diff.txt]\n\nIMPORTANT: This diff is truncated.\nDo NOT return APPROVED unless the available diff is sufficient\nto confidently review the change."
+     fi
+ 
+     printf '\nChanged Files:\n%s\n' "$CHANGED_FILES" >> pr_review_prompt.txt
+
+commit 0330d35504fdc88ad511ce617bdb034ccddf02b4
+Author: tungcutte35 <tungcutte35@users.noreply.github.com>
+Date:   Tue Aug 25 15:04:45 2026 +0700
+
+    fix: restore compact diff for LOCAL fallback so GPT can actually review the code
+
+diff --git a/scripts/github-pr.sh b/scripts/github-pr.sh
+index 660f7c8..472fa2b 100755
+--- a/scripts/github-pr.sh
++++ b/scripts/github-pr.sh
+@@ -76,5 +76,36 @@ printf 'Commit SHA: %s\n' "$COMMIT_SHA" >> pr_review_prompt.txt
+ printf 'Branch: %s\n' "$BRANCH" >> pr_review_prompt.txt
+ printf 'PR Title: %s\n' "$PR_TITLE" >> pr_review_prompt.txt
+ 
++# If this is a LOCAL fallback review, GPT has no GitHub PR to fetch from, so we MUST supply the diff.
++if [ "$PR_NUMBER" = "LOCAL" ]; then
++    echo "    [!] LOCAL fallback detected. Appending compact diff directly to prompt..."
++    
++    BASE_COMMIT=$(git merge-base "$BASE_BRANCH" "$BRANCH" 2>/dev/null || echo "HEAD~1")
++    if [ "$BASE_COMMIT" = "HEAD~1" ]; then
++        ACTUAL_DIFF=$(git diff HEAD~1 2>/dev/null || echo "No diff available")
++        CHANGED_FILES=$(git diff --name-only HEAD~1 2>/dev/null || echo "See diff below")
++    else
++        ACTUAL_DIFF=$(git diff "$BASE_COMMIT...$BRANCH" 2>/dev/null || echo "No diff available")
++        CHANGED_FILES=$(git diff --name-only "$BASE_COMMIT...$BRANCH" 2>/dev/null || echo "See diff below")
++    fi
++    
++    echo "$ACTUAL_DIFF" > pr_raw_diff.txt
++    TOTAL_DIFF_LINES=$(echo "$ACTUAL_DIFF" | wc -l)
++    MAX_DIFF_LINES=300
++    COMPACT_DIFF=$(echo "$ACTUAL_DIFF" | head -n "$MAX_DIFF_LINES")
++    TRUNCATION_NOTE=""
++    if [ "$TOTAL_DIFF_LINES" -gt "$MAX_DIFF_LINES" ]; then
++        REMAINING=$((TOTAL_DIFF_LINES - MAX_DIFF_LINES))
++        TRUNCATION_NOTE="[TRUNCATED: $REMAINING more lines not shown. Full diff saved in pr_raw_diff.txt]"
++    fi
++
++    printf '\nChanged Files:\n%s\n' "$CHANGED_FILES" >> pr_review_prompt.txt
++    printf '\nCOMPACT GIT DIFF SUMMARY:\n%s\n' "$COMPACT_DIFF" >> pr_review_prompt.txt
++    if [ -n "$TRUNCATION_NOTE" ]; then
++        printf '%s\n' "$TRUNCATION_NOTE" >> pr_review_prompt.txt
++    fi
++    printf '\n[END OF DIFF]\nPlease evaluate the local changes above.\n' >> pr_review_prompt.txt
++fi
++
+ echo -e "\n=== DONE - Prompt written to: pr_review_prompt.txt ($(wc -l < pr_review_prompt.txt) lines) ==="
+ 
+
+commit a46603305fd397339d684604f25ea2832e71a670
+Author: tungcutte35 <tungcutte35@users.noreply.github.com>
+Date:   Tue Aug 25 14:53:52 2026 +0700
+
+    opt: revert to 5-line prompt now that branch is pushed
+
+diff --git a/scripts/github-pr.sh b/scripts/github-pr.sh
+index 3d37f96..660f7c8 100755
+--- a/scripts/github-pr.sh
++++ b/scripts/github-pr.sh
+@@ -68,68 +68,13 @@ else
+ fi
+ echo "    Commit SHA: ${COMMIT_SHA}"
+ 
+-echo "[2] Fetching PR metadata & git diff..."
+-ACTUAL_DIFF=$(git diff "$BASE_BRANCH...$BRANCH" 2>/dev/null || git diff HEAD~1 2>/dev/null || echo "No diff available")
+-CHANGED_FILES=$(git diff --name-only "$BASE_BRANCH...$BRANCH" 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null || echo "See diff below")
+-
+-echo "$ACTUAL_DIFF" > pr_raw_diff.txt
+-
+-TOTAL_DIFF_LINES=$(echo "$ACTUAL_DIFF" | wc -l)
+-MAX_DIFF_LINES=300
+-COMPACT_DIFF=$(echo "$ACTUAL_DIFF" | head -n "$MAX_DIFF_LINES")
+-TRUNCATION_NOTE=""
+-if [ "$TOTAL_DIFF_LINES" -gt "$MAX_DIFF_LINES" ]; then
+-    REMAINING=$((TOTAL_DIFF_LINES - MAX_DIFF_LINES))
+-    TRUNCATION_NOTE="[TRUNCATED: $REMAINING more lines not shown. Full diff saved in pr_raw_diff.txt]"
+-fi
+-
+-echo "[3] Building GPT review prompt..."
+-# SECURITY: Use quoted heredoc ('EOF') to prevent shell expansion of diff content
+-cat <<'STATIC_EOF' > pr_review_prompt.txt
+-You are reviewing a GitHub Pull Request as a senior software engineer using Production Review Pipeline v2.
+-
+-STATIC_EOF
+-
+-printf 'Repository: %s\n' "$OWNER/$REPO_NAME" >> pr_review_prompt.txt
++echo "[2] Building minimal GPT review prompt (metadata only)..."
++# GPT reads the PR itself via GitHub plugin — only send metadata
++printf 'Repository: %s\n' "$OWNER/$REPO_NAME" > pr_review_prompt.txt
+ printf 'Pull Request: %s\n' "$PR_URL" >> pr_review_prompt.txt
+ printf 'Commit SHA: %s\n' "$COMMIT_SHA" >> pr_review_prompt.txt
+ printf 'Branch: %s\n' "$BRANCH" >> pr_review_prompt.txt
+-printf 'PR Title: %s\n\n' "$PR_TITLE" >> pr_review_prompt.txt
+-
+-printf 'Changed Files:\n%s\n\n' "$CHANGED_FILES" >> pr_review_prompt.txt
+-
+-printf 'COMPACT GIT DIFF SUMMARY:\n' >> pr_review_prompt.txt
+-printf '%s\n' "$COMPACT_DIFF" >> pr_review_prompt.txt
+-if [ -n "$TRUNCATION_NOTE" ]; then
+-    printf '%s\n' "$TRUNCATION_NOTE" >> pr_review_prompt.txt
+-fi
+-
+-cat <<'STATIC_EOF' >> pr_review_prompt.txt
+-
+-Please inspect the PR details & diff above and evaluate the changes.
+-
+-Output Requirements:
+-At the very beginning output EXACTLY one of:
+-
+-REVIEW_STATUS: APPROVED
+-
+-or
+-
+-REVIEW_STATUS: CHANGES_REQUESTED
+-
+-If CHANGES_REQUESTED, output findings using EXACTLY:
+-
+-[FINDING]
+-Severity: CRITICAL|HIGH|MEDIUM|LOW
+-File: path/to/file
+-Problem: <specific problem>
+-Evidence: <concrete execution path / call sequence>
+-Failure scenario: <realistic failure scenario>
+-Recommended fix: <practical code snippet or implementation approach>
+-[/FINDING]
+-
+-After all findings, provide a concise review summary.
+-STATIC_EOF
++printf 'PR Title: %s\n' "$PR_TITLE" >> pr_review_prompt.txt
+ 
+ echo -e "\n=== DONE - Prompt written to: pr_review_prompt.txt ($(wc -l < pr_review_prompt.txt) lines) ==="
+ 
+
+commit 7889b7b849379651ba4387a04f826c0a335cb127
+Author: tungcutte35 <tungcutte35@users.noreply.github.com>
+Date:   Tue Aug 25 14:52:37 2026 +0700
+
+    fix: restore compact diff (300 lines) so ChatGPT can review local commits that are not pushed to GitHub
+
+diff --git a/scripts/github-pr.sh b/scripts/github-pr.sh
+index 660f7c8..3d37f96 100755
+--- a/scripts/github-pr.sh
++++ b/scripts/github-pr.sh
+@@ -68,13 +68,68 @@ else
+ fi
+ echo "    Commit SHA: ${COMMIT_SHA}"
+ 
+-echo "[2] Building minimal GPT review prompt (metadata only)..."
+-# GPT reads the PR itself via GitHub plugin — only send metadata
+-printf 'Repository: %s\n' "$OWNER/$REPO_NAME" > pr_review_prompt.txt
++echo "[2] Fetching PR metadata & git diff..."
++ACTUAL_DIFF=$(git diff "$BASE_BRANCH...$BRANCH" 2>/dev/null || git diff HEAD~1 2>/dev/null || echo "No diff available")
++CHANGED_FILES=$(git diff --name-only "$BASE_BRANCH...$BRANCH" 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null || echo "See diff below")
++
++echo "$ACTUAL_DIFF" > pr_raw_diff.txt
++
++TOTAL_DIFF_LINES=$(echo "$ACTUAL_DIFF" | wc -l)
++MAX_DIFF_LINES=300
++COMPACT_DIFF=$(echo "$ACTUAL_DIFF" | head -n "$MAX_DIFF_LINES")
++TRUNCATION_NOTE=""
++if [ "$TOTAL_DIFF_LINES" -gt "$MAX_DIFF_LINES" ]; then
++    REMAINING=$((TOTAL_DIFF_LINES - MAX_DIFF_LINES))
++    TRUNCATION_NOTE="[TRUNCATED: $REMAINING more lines not shown. Full diff saved in pr_raw_diff.txt]"
++fi
++
++echo "[3] Building GPT review prompt..."
++# SECURITY: Use quoted heredoc ('EOF') to prevent shell expansion of diff content
++cat <<'STATIC_EOF' > pr_review_prompt.txt
++You are reviewing a GitHub Pull Request as a senior software engineer using Production Review Pipeline v2.
++
++STATIC_EOF
++
++printf 'Repository: %s\n' "$OWNER/$REPO_NAME" >> pr_review_prompt.txt
+ printf 'Pull Request: %s\n' "$PR_URL" >> pr_review_prompt.txt
+ printf 'Commit SHA: %s\n' "$COMMIT_SHA" >> pr_review_prompt.txt
+ printf 'Branch: %s\n' "$BRANCH" >> pr_review_prompt.txt
+-printf 'PR Title: %s\n' "$PR_TITLE" >> pr_review_prompt.txt
++printf 'PR Title: %s\n\n' "$PR_TITLE" >> pr_review_prompt.txt
++
++printf 'Changed Files:\n%s\n\n' "$CHANGED_FILES" >> pr_review_prompt.txt
++
++printf 'COMPACT GIT DIFF SUMMARY:\n' >> pr_review_prompt.txt
++printf '%s\n' "$COMPACT_DIFF" >> pr_review_prompt.txt
++if [ -n "$TRUNCATION_NOTE" ]; then
++    printf '%s\n' "$TRUNCATION_NOTE" >> pr_review_prompt.txt
++fi
++
++cat <<'STATIC_EOF' >> pr_review_prompt.txt
++
++Please inspect the PR details & diff above and evaluate the changes.
++
++Output Requirements:
++At the very beginning output EXACTLY one of:
++
++REVIEW_STATUS: APPROVED
++
++or
++
++REVIEW_STATUS: CHANGES_REQUESTED
++
++If CHANGES_REQUESTED, output findings using EXACTLY:
++
++[FINDING]
++Severity: CRITICAL|HIGH|MEDIUM|LOW
++File: path/to/file
++Problem: <specific problem>
++Evidence: <concrete execution path / call sequence>
++Failure scenario: <realistic failure scenario>
++Recommended fix: <practical code snippet or implementation approach>
++[/FINDING]
++
++After all findings, provide a concise review summary.
++STATIC_EOF
+ 
+ echo -e "\n=== DONE - Prompt written to: pr_review_prompt.txt ($(wc -l < pr_review_prompt.txt) lines) ==="
+ 
+
+commit 532aba7831a76246e18fc7759ae8820b3a56dc34
+Author: tungcutte35 <tungcutte35@users.noreply.github.com>
+Date:   Tue Aug 25 14:50:14 2026 +0700
+
+    opt: ultra minimal prompt generation — GPT receives only 5 lines of metadata, Claude receives only GPT's review response
+
+diff --git a/scripts/github-pr.sh b/scripts/github-pr.sh
+index f7dc30c..660f7c8 100755
+--- a/scripts/github-pr.sh
++++ b/scripts/github-pr.sh
+@@ -68,78 +68,13 @@ else
+ fi
+ echo "    Commit SHA: ${COMMIT_SHA}"
+ 
+-echo "[2] Fetching PR metadata & full git diff..."
+-ACTUAL_DIFF=$(git diff "$BASE_BRANCH...$BRANCH" 2>/dev/null || git diff HEAD~1 2>/dev/null || echo "No diff available")
+-DIFF_TEXT="$ACTUAL_DIFF"
+-
+-CHANGED_FILES=$(git diff --name-only "$BASE_BRANCH...$BRANCH" 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null || echo "See diff below")
+-
+-RELEVANT_CONTEXT=""
+-if [ -n "$CHANGED_FILES" ]; then
+-    RELEVANT_CONTEXT=$(git log -n 3 --oneline 2>/dev/null || echo "Recent commits fetched")
+-fi
+-
+-echo "$ACTUAL_DIFF" > pr_raw_diff.txt
+-
+-TOTAL_DIFF_LINES=$(echo "$ACTUAL_DIFF" | wc -l)
+-MAX_DIFF_LINES=200
+-COMPACT_DIFF=$(echo "$ACTUAL_DIFF" | head -n "$MAX_DIFF_LINES")
+-TRUNCATION_NOTE=""
+-if [ "$TOTAL_DIFF_LINES" -gt "$MAX_DIFF_LINES" ]; then
+-    REMAINING=$((TOTAL_DIFF_LINES - MAX_DIFF_LINES))
+-    TRUNCATION_NOTE="[TRUNCATED: $REMAINING more lines not shown. Full diff saved in pr_raw_diff.txt]"
+-fi
+-
+-echo "[3] Building concise Production Review Pipeline v2 prompt for ChatGPT..."
+-# SECURITY: Use quoted heredoc ('EOF') to prevent shell expansion of diff content
+-# This prevents command injection via malicious $(...) or backtick sequences in PR diffs
+-cat <<'STATIC_EOF' > pr_review_prompt.txt
+-You are reviewing a GitHub Pull Request as a senior software engineer using Production Review Pipeline v2.
+-
+-STATIC_EOF
+-
+-# Append safe metadata fields via printf
+-printf 'Repository: %s\n' "$OWNER/$REPO_NAME" >> pr_review_prompt.txt
++echo "[2] Building minimal GPT review prompt (metadata only)..."
++# GPT reads the PR itself via GitHub plugin — only send metadata
++printf 'Repository: %s\n' "$OWNER/$REPO_NAME" > pr_review_prompt.txt
+ printf 'Pull Request: %s\n' "$PR_URL" >> pr_review_prompt.txt
+ printf 'Commit SHA: %s\n' "$COMMIT_SHA" >> pr_review_prompt.txt
+ printf 'Branch: %s\n' "$BRANCH" >> pr_review_prompt.txt
+-printf 'PR Title: %s\n\n' "$PR_TITLE" >> pr_review_prompt.txt
+-
+-printf 'Changed Files:\n%s\n\n' "$CHANGED_FILES" >> pr_review_prompt.txt
+-printf 'RELEVANT COMMITS:\n%s\n\n' "$RELEVANT_CONTEXT" >> pr_review_prompt.txt
+-
+-printf 'COMPACT GIT DIFF SUMMARY:\n' >> pr_review_prompt.txt
+-printf '%s\n' "$COMPACT_DIFF" >> pr_review_prompt.txt
+-if [ -n "$TRUNCATION_NOTE" ]; then
+-    printf '%s\n' "$TRUNCATION_NOTE" >> pr_review_prompt.txt
+-fi
+-
+-cat <<'STATIC_EOF' >> pr_review_prompt.txt
+-
+-Please inspect the PR details & diff above and evaluate the changes.
+-
+-Output Requirements:
+-At the very beginning output EXACTLY one of:
+-
+-REVIEW_STATUS: APPROVED
+-
+-or
+-
+-REVIEW_STATUS: CHANGES_REQUESTED
+-
+-If CHANGES_REQUESTED, output findings using EXACTLY:
+-
+-[FINDING]
+-Severity: CRITICAL|HIGH|MEDIUM|LOW
+-File: path/to/file
+-Problem: <specific problem>
+-Evidence: <concrete execution path / call sequence>
+-Failure scenario: <realistic failure scenario>
+-Recommended fix: <practical code snippet or implementation approach>
+-[/FINDING]
+-
+-After all findings, provide a concise review summary.
+-STATIC_EOF
++printf 'PR Title: %s\n' "$PR_TITLE" >> pr_review_prompt.txt
+ 
+-echo -e "\n=== DONE - Concise prompt written to: pr_review_prompt.txt & Raw diff to: pr_raw_diff.txt ==="
++echo -e "\n=== DONE - Prompt written to: pr_review_prompt.txt ($(wc -l < pr_review_prompt.txt) lines) ==="
+ 
+
+commit 9d3db279d4336940c5255fb44d002bc3cdf036bb
+Author: tungcutte35 <tungcutte35@users.noreply.github.com>
+Date:   Tue Aug 25 14:46:22 2026 +0700
+
+    security: fix CRITICAL heredoc command injection + add truncation marker + explicit LOCAL fallback
+
+diff --git a/scripts/github-pr.sh b/scripts/github-pr.sh
+index 98002a8..f7dc30c 100755
+--- a/scripts/github-pr.sh
++++ b/scripts/github-pr.sh
+@@ -54,10 +54,15 @@ if [ -z "$PR_NUMBER" ]; then
+ fi
+ 
+ if [ -z "$PR_NUMBER" ]; then
+-    echo "    [!] Notice: Could not create PR via GitHub API (branch may not be pushed to remote yet)."
+-    echo "    [!] Proceeding with local git diff prompt generation..."
+-    PR_NUMBER="LOCAL"
+-    PR_URL="Local Branch: $BRANCH (Commit: $COMMIT_SHA)"
++    echo "    [!] WARNING: Could not create PR via GitHub API (branch may not be pushed to remote yet)."
++    if [ "${ALLOW_LOCAL_REVIEW:-1}" = "1" ]; then
++        echo "    [!] ALLOW_LOCAL_REVIEW=1 — Falling back to LOCAL mode..."
++        PR_NUMBER="LOCAL"
++        PR_URL="Local Branch: $BRANCH (Commit: $COMMIT_SHA)"
++    else
++        echo "    [!] Set ALLOW_LOCAL_REVIEW=1 to use local diff mode. Exiting."
++        exit 1
++    fi
+ else
+     echo "    PR #${PR_NUMBER}: ${PR_URL}"
+ fi
+@@ -76,26 +81,40 @@ fi
+ 
+ echo "$ACTUAL_DIFF" > pr_raw_diff.txt
+ 
+-COMPACT_DIFF=$(echo "$ACTUAL_DIFF" | head -n 200)
++TOTAL_DIFF_LINES=$(echo "$ACTUAL_DIFF" | wc -l)
++MAX_DIFF_LINES=200
++COMPACT_DIFF=$(echo "$ACTUAL_DIFF" | head -n "$MAX_DIFF_LINES")
++TRUNCATION_NOTE=""
++if [ "$TOTAL_DIFF_LINES" -gt "$MAX_DIFF_LINES" ]; then
++    REMAINING=$((TOTAL_DIFF_LINES - MAX_DIFF_LINES))
++    TRUNCATION_NOTE="[TRUNCATED: $REMAINING more lines not shown. Full diff saved in pr_raw_diff.txt]"
++fi
+ 
+ echo "[3] Building concise Production Review Pipeline v2 prompt for ChatGPT..."
+-cat <<EOF > pr_review_prompt.txt
++# SECURITY: Use quoted heredoc ('EOF') to prevent shell expansion of diff content
++# This prevents command injection via malicious $(...) or backtick sequences in PR diffs
++cat <<'STATIC_EOF' > pr_review_prompt.txt
+ You are reviewing a GitHub Pull Request as a senior software engineer using Production Review Pipeline v2.
+ 
+-Repository: $OWNER/$REPO_NAME
+-Pull Request: $PR_URL
+-Commit SHA: $COMMIT_SHA
+-Branch: $BRANCH
+-PR Title: $PR_TITLE
++STATIC_EOF
++
++# Append safe metadata fields via printf
++printf 'Repository: %s\n' "$OWNER/$REPO_NAME" >> pr_review_prompt.txt
++printf 'Pull Request: %s\n' "$PR_URL" >> pr_review_prompt.txt
++printf 'Commit SHA: %s\n' "$COMMIT_SHA" >> pr_review_prompt.txt
++printf 'Branch: %s\n' "$BRANCH" >> pr_review_prompt.txt
++printf 'PR Title: %s\n\n' "$PR_TITLE" >> pr_review_prompt.txt
+ 
+-Changed Files:
+-$CHANGED_FILES
++printf 'Changed Files:\n%s\n\n' "$CHANGED_FILES" >> pr_review_prompt.txt
++printf 'RELEVANT COMMITS:\n%s\n\n' "$RELEVANT_CONTEXT" >> pr_review_prompt.txt
+ 
+-RELEVANT COMMITS:
+-$RELEVANT_CONTEXT
++printf 'COMPACT GIT DIFF SUMMARY:\n' >> pr_review_prompt.txt
++printf '%s\n' "$COMPACT_DIFF" >> pr_review_prompt.txt
++if [ -n "$TRUNCATION_NOTE" ]; then
++    printf '%s\n' "$TRUNCATION_NOTE" >> pr_review_prompt.txt
++fi
+ 
+-COMPACT GIT DIFF SUMMARY:
+-$COMPACT_DIFF
++cat <<'STATIC_EOF' >> pr_review_prompt.txt
+ 
+ Please inspect the PR details & diff above and evaluate the changes.
+ 
+@@ -120,6 +139,7 @@ Recommended fix: <practical code snippet or implementation approach>
+ [/FINDING]
+ 
+ After all findings, provide a concise review summary.
+-EOF
++STATIC_EOF
+ 
+ echo -e "\n=== DONE - Concise prompt written to: pr_review_prompt.txt & Raw diff to: pr_raw_diff.txt ==="
++
+
+commit f239a81c9d93018da9acd5d4d2cd7479027eb103
+Author: tungcutte35 <tungcutte35@users.noreply.github.com>
+Date:   Tue Aug 25 14:40:44 2026 +0700
+
+    fix: restore .DS_Store/*.log in .gitignore & increase compact diff to 200 lines for better review coverage
+
+diff --git a/scripts/github-pr.sh b/scripts/github-pr.sh
+index 2364bbf..98002a8 100755
+--- a/scripts/github-pr.sh
++++ b/scripts/github-pr.sh
+@@ -76,7 +76,7 @@ fi
+ 
+ echo "$ACTUAL_DIFF" > pr_raw_diff.txt
+ 
+-COMPACT_DIFF=$(echo "$ACTUAL_DIFF" | head -n 40)
++COMPACT_DIFF=$(echo "$ACTUAL_DIFF" | head -n 200)
+ 
+ echo "[3] Building concise Production Review Pipeline v2 prompt for ChatGPT..."
+ cat <<EOF > pr_review_prompt.txt
+
+commit c4d0701ae1fc0e903e2364337a0bd9a38b74c0db
+Author: tungcutte35 <tungcutte35@users.noreply.github.com>
+Date:   Tue Aug 25 14:28:13 2026 +0700
+
+    opt: add compact 40-line diff summary to pr_review_prompt.txt for local branch reviews
+
+diff --git a/scripts/github-pr.sh b/scripts/github-pr.sh
+index 5e9d95e..2364bbf 100755
+--- a/scripts/github-pr.sh
++++ b/scripts/github-pr.sh
+@@ -76,6 +76,8 @@ fi
+ 
+ echo "$ACTUAL_DIFF" > pr_raw_diff.txt
+ 
++COMPACT_DIFF=$(echo "$ACTUAL_DIFF" | head -n 40)
++
+ echo "[3] Building concise Production Review Pipeline v2 prompt for ChatGPT..."
+ cat <<EOF > pr_review_prompt.txt
+ You are reviewing a GitHub Pull Request as a senior software engineer using Production Review Pipeline v2.
+@@ -92,7 +94,10 @@ $CHANGED_FILES
+ RELEVANT COMMITS:
+ $RELEVANT_CONTEXT
+ 
+-Please inspect this PR using your GitHub tools/plugins and evaluate the changes.
++COMPACT GIT DIFF SUMMARY:
++$COMPACT_DIFF
++
++Please inspect the PR details & diff above and evaluate the changes.
+ 
+ Output Requirements:
+ At the very beginning output EXACTLY one of:
+
+commit 24c42276ac64c6c61b713f9d8dde76a3c2ae9684
+Author: tungcutte35 <tungcutte35@users.noreply.github.com>
+Date:   Tue Aug 25 14:22:36 2026 +0700
+
+    fix: completely remove diff text from pr_review_prompt.txt to keep ChatGPT prompt under 25 lines
+
+diff --git a/scripts/github-pr.sh b/scripts/github-pr.sh
+index 508b43c..5e9d95e 100755
+--- a/scripts/github-pr.sh
++++ b/scripts/github-pr.sh
+@@ -76,14 +76,6 @@ fi
+ 
+ echo "$ACTUAL_DIFF" > pr_raw_diff.txt
+ 
+-DIFF_BLOCK=""
+-if [ "$PR_NUMBER" = "LOCAL" ]; then
+-    DIFF_BLOCK="
+-DIFF CONTENT (Local Working Branch Diff):
+-$ACTUAL_DIFF
+-"
+-fi
+-
+ echo "[3] Building concise Production Review Pipeline v2 prompt for ChatGPT..."
+ cat <<EOF > pr_review_prompt.txt
+ You are reviewing a GitHub Pull Request as a senior software engineer using Production Review Pipeline v2.
+@@ -99,8 +91,8 @@ $CHANGED_FILES
+ 
+ RELEVANT COMMITS:
+ $RELEVANT_CONTEXT
+-$DIFF_BLOCK
+-Please inspect this PR using your GitHub tools/plugins (or the local diff above) and evaluate the changes.
++
++Please inspect this PR using your GitHub tools/plugins and evaluate the changes.
+ 
+ Output Requirements:
+ At the very beginning output EXACTLY one of:

@@ -68,18 +68,13 @@ else
 fi
 echo "    Commit SHA: ${COMMIT_SHA}"
 
-echo "[2] Building minimal GPT review prompt (metadata only)..."
-# GPT reads the PR itself via GitHub plugin — only send metadata
 cat << 'EOF' > pr_review_prompt.txt
-Please review this PR. You must follow the Output Requirements below:
-1. Review the code according to our guidelines.
-2. At the VERY END of your response, output EXACTLY one of the following lines based on your verdict:
-REVIEW_STATUS: APPROVED
-or
-REVIEW_STATUS: CHANGES_REQUESTED
+You are reviewing a GitHub Pull Request as a senior software engineer using Production Review Pipeline v2.
 
-Do not put REVIEW_STATUS anywhere else in your response to avoid confusing the parser.
-
+==================================================
+PHASE 1: DISCOVERY (METADATA & CONTEXT)
+==================================================
+Please use your GitHub plugin/tool to read the diff for the PR based on the metadata below.
 EOF
 
 printf 'Repository: %s\n' "$OWNER/$REPO_NAME" >> pr_review_prompt.txt
@@ -87,6 +82,69 @@ printf 'Pull Request: %s\n' "$PR_URL" >> pr_review_prompt.txt
 printf 'Commit SHA: %s\n' "$COMMIT_SHA" >> pr_review_prompt.txt
 printf 'Branch: %s\n' "$BRANCH" >> pr_review_prompt.txt
 printf 'PR Title: %s\n' "$PR_TITLE" >> pr_review_prompt.txt
+
+cat << 'EOF' >> pr_review_prompt.txt
+
+==================================================
+PHASE 2: ANALYSIS (12-POINT SYSTEMATIC PROTOCOL)
+==================================================
+Systematically evaluate the change set across all 12 checkpoints:
+1. FUNCTIONAL CORRECTNESS: Happy/failure paths, create/update/delete behavior, boundary inputs, UI operation promises.
+2. DATA FLOW & STATE CONSISTENCY: Trace values UI → Local State → Payload → API → Store → UI. Check stale/inconsistent state.
+3. API & BACKEND CONTRACT: HTTP method, endpoint, payload shape, create vs update consistency, multipart, nullable fields.
+4. EDGE CASES & BOUNDARY CONDITIONS: Empty lists, zero, negative/max values, first/last page, rapid clicks, timeouts, cancellation.
+5. CONCURRENCY & ASYNC FLOWS: Race conditions, duplicate requests, stale responses, unmount during request, PENDING → SUCCESS/FAILED.
+6. SECURITY: Secrets, IDOR, privilege escalation, client-only auth, XSS, injection.
+7. FINANCIAL / BUSINESS DATA SAFETY: Numeric boundaries, balance checks, duplicate submission, idempotency, rounding, totals.
+8. PAGINATION / FILTERING / SEARCH: Page/pageSize, total count, filter persistence, global vs current-page totals.
+9. ERROR HANDLING & RECOVERY: API errors, partial failures, loading states, stale state recovery.
+10. REGRESSION ANALYSIS: Compare previous vs changed behavior (What worked before? What changed? Could users lose functionality?).
+11. CODE QUALITY: Only report concrete correctness/maintainability risks. No subjective naming/style nitpicks.
+12. TEST COVERAGE: Request minimal reproducible test only for concrete bugs found.
+
+==================================================
+PHASE 3: VERIFICATION (VERIFICATION & EVIDENCE GATE)
+==================================================
+Filter every candidate finding through the Verification Gate:
+Candidate Issue → Can I reproduce it from code? → Is it caused by this PR? → Could existing code prevent it? → Is impact realistic?
+
+EVIDENCE GATE REQUIREMENT:
+Every reported finding MUST contain concrete execution path evidence:
+- Trace the exact function calls or state transitions.
+- Explain the realistic failure scenario.
+- RULE: No concrete evidence → DO NOT output finding. Do not output vague claims like "there might be a race condition".
+
+==================================================
+PHASE 4: VALIDATION (BEHAVIOR MATRIX, BLIND-SPOT & DEDUPLICATION)
+==================================================
+1. CHANGED BEHAVIOR MATRIX: Mentally construct Flow | Before | After | Risk matrix to catch silent default/behavioral shifts.
+2. ROOT CAUSE DEDUPLICATION: Group multiple related symptoms across files into ONE single finding based on the underlying root cause.
+3. BLIND-SPOT PASS: Internal audit on file scrutiny, multi-file flows, async races, paginated totals, and UI/backend state drift.
+
+==================================================
+PHASE 5: REPORTING & FINAL VERDICT
+==================================================
+If CHANGES_REQUESTED, output findings using EXACTLY this format:
+
+[FINDING]
+Severity: CRITICAL|HIGH|MEDIUM|LOW
+File: path/to/file
+Problem: <specific problem>
+Evidence: <concrete execution path / call sequence>
+Failure scenario: <realistic failure scenario>
+Recommended fix: <practical code snippet or implementation approach>
+[/FINDING]
+
+After all findings, provide a concise review summary.
+
+Output Requirements:
+At the VERY END of your response, output EXACTLY one of the following lines based on your verdict:
+REVIEW_STATUS: APPROVED
+or
+REVIEW_STATUS: CHANGES_REQUESTED
+
+Do not put REVIEW_STATUS anywhere else in your response to avoid confusing the parser.
+EOF
 
 # If this is a LOCAL fallback review, GPT has no GitHub PR to fetch from, so we MUST supply the diff.
 if [ "$PR_NUMBER" = "LOCAL" ]; then
@@ -114,7 +172,7 @@ if [ "$PR_NUMBER" = "LOCAL" ]; then
     printf '\nChanged Files:\n%s\n' "$CHANGED_FILES" >> pr_review_prompt.txt
     printf '\nCOMPACT GIT DIFF SUMMARY:\n%s\n' "$COMPACT_DIFF" >> pr_review_prompt.txt
     if [ -n "$TRUNCATION_NOTE" ]; then
-        printf '%s\n' "$TRUNCATION_NOTE" >> pr_review_prompt.txt
+        printf '%b\n' "$TRUNCATION_NOTE" >> pr_review_prompt.txt
     fi
     printf '\n[END OF DIFF]\nPlease evaluate the local changes above.\n' >> pr_review_prompt.txt
 fi
