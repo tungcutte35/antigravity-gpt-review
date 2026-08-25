@@ -149,7 +149,11 @@ async function runGptReview(options = {}) {
   const assistantMessages = chatPage.locator(assistantSelector);
   const count = await assistantMessages.count();
   
-  const targetIndex = count > beforeCount ? count - 1 : (count > 0 ? count - 1 : -1);
+  if (count <= beforeCount) {
+    throw new Error('No new GPT response generated for this review (timeout or generation failed).');
+  }
+
+  const targetIndex = count - 1;
 
   if (targetIndex >= 0) {
     const lastMessage = assistantMessages.nth(targetIndex);
