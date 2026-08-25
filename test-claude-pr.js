@@ -11,14 +11,14 @@ async function runClaudeReview(options = {}) {
   } = options;
 
   const resolvedDiffPath = path.resolve(diffFilePath);
-  const resolvedGptPath = path.resolve(gptResponseFilePath);
+  const resolvedGptPath = gptResponseFilePath ? path.resolve(gptResponseFilePath) : null;
 
   if (!fs.existsSync(resolvedDiffPath)) {
     throw new Error(`File not found -> ${resolvedDiffPath}`);
   }
 
   let gptResponseText = options.gptResponseText || '';
-  if (!gptResponseText && gptResponseFilePath && fs.existsSync(resolvedGptPath)) {
+  if (!gptResponseText && resolvedGptPath && fs.existsSync(resolvedGptPath)) {
     gptResponseText = fs.readFileSync(resolvedGptPath, 'utf-8');
   }
 
