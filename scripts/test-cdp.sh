@@ -29,7 +29,8 @@ else
         --remote-debugging-port=9222 \
         --user-data-dir="$CHROME_DIR" \
         --no-first-run \
-        "https://chatgpt.com" </dev/null >/dev/null 2>&1 &
+        "https://chatgpt.com" \
+        "https://claude.ai/new" </dev/null >/dev/null 2>&1 &
     
     echo "[3] Waiting 4 seconds for Chrome to start..."
     sleep 4

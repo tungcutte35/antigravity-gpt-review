@@ -93,12 +93,30 @@ Chạy script để commit code hiện tại (nếu cần), tạo Pull Request l
   .\scripts\github-pr.ps1
   ```
 
-### Bước 3: Gửi Review cho ChatGPT
-Script Node.js sẽ kết nối với trình duyệt đang mở ở cổng `9222`, lấy nội dung từ `pr_review_prompt.txt`, dán vào tab ChatGPT, gửi đi và đợi kết quả.
-```bash
-node test-gpt-pr.js
-```
-Nếu review thành công và không có lỗi nghiêm trọng, script sẽ trả về `Exit Code 0` (APPROVED). Nếu có lỗi cần sửa, script trả về `Exit Code 1` (CHANGES_REQUESTED).
+### Bước 3: Gửi Review (ChatGPT / Claude / Dual Review)
+Script Node.js kết nối với trình duyệt đang mở ở cổng `9222`:
+
+- **Chỉ review bằng ChatGPT Web:**
+  ```bash
+  npm run review:gpt
+  # hoặc: node test-gpt-pr.js
+  ```
+
+- **Chỉ review bằng Claude Web (`https://claude.ai/new`):**
+  ```bash
+  npm run review:claude
+  # hoặc: node test-claude-pr.js
+  ```
+
+- **Review 2 Lớp Nâng Cao (ChatGPT -> Claude.ai):**
+  ```bash
+  npm run review:dual
+  # hoặc: node test-dual-pr.js
+  ```
+  *Luồng Dual-Stage:*
+  1. ChatGPT tiến hành review lớp 1 và lưu kết quả vào `gpt_review_response.txt`.
+  2. Toàn bộ diff + kết quả của ChatGPT được gửi sang **Claude Web (`https://claude.ai/new`)** để thẩm định lại (Verification & Consensus Gate).
+  3. **Claude.ai đưa ra VERDICT cuối cùng (`APPROVED` hoặc `CHANGES_REQUESTED`)**.
 
 ---
 
@@ -113,10 +131,14 @@ Nếu bạn đang sử dụng môi trường Antigravity IDE, bạn có thể g�
 
 | File / Folder | Chức năng |
 |---|---|
-| `scripts/test-cdp.*` | Script khởi động Google Chrome độc lập ở cổng **9222** với profile riêng. |
+| `scripts/test-cdp.*` | Script khởi động Google Chrome độc lập ở cổng **9222** (tự động mở tab ChatGPT & Claude.ai/new). |
 | `scripts/github-pr.*` | Tự động lấy Git Token, tạo/cập nhật PR và xuất file `pr_review_prompt.txt` theo chuẩn v2. |
-| `test-gpt-pr.js` | Script Node.js (Playwright) kết nối CDP, tương tác với giao diện ChatGPT Web để submit code và parse kết quả. |
+| `test-gpt-pr.js` | Script kết nối CDP tương tác với ChatGPT Web (Pha 1). |
+| `test-claude-pr.js` | Script kết nối CDP tương tác với Claude Web `https://claude.ai/new` (Pha 2 thẩm định). |
+| `test-dual-pr.js` | Runner tổng hợp điều phối luồng review 2 lớp liên hoàn ChatGPT -> Claude.ai. |
 | `pr_review_prompt.txt`| File lưu trữ prompt sinh ra tạm thời, chứa metadata và git diff của PR. |
+| `gpt_review_response.txt` | File lưu kết quả review sơ bộ của ChatGPT. |
+| `claude_review_response.txt` | File lưu kết quả thẩm định cuối cùng của Claude.ai. |
 
 ---
 

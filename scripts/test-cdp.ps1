@@ -22,7 +22,8 @@ Start-Process -FilePath $chromePath -ArgumentList @(
     "--remote-debugging-port=9222",
     "--user-data-dir=`"$chromeDir`"",
     "--no-first-run",
-    "https://chatgpt.com"
+    "https://chatgpt.com",
+    "https://claude.ai/new"
 )
 
 Write-Host "[3] Waiting 5 seconds for Chrome to start..."
