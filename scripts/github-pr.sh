@@ -68,68 +68,13 @@ else
 fi
 echo "    Commit SHA: ${COMMIT_SHA}"
 
-echo "[2] Fetching PR metadata & git diff..."
-ACTUAL_DIFF=$(git diff "$BASE_BRANCH...$BRANCH" 2>/dev/null || git diff HEAD~1 2>/dev/null || echo "No diff available")
-CHANGED_FILES=$(git diff --name-only "$BASE_BRANCH...$BRANCH" 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null || echo "See diff below")
-
-echo "$ACTUAL_DIFF" > pr_raw_diff.txt
-
-TOTAL_DIFF_LINES=$(echo "$ACTUAL_DIFF" | wc -l)
-MAX_DIFF_LINES=300
-COMPACT_DIFF=$(echo "$ACTUAL_DIFF" | head -n "$MAX_DIFF_LINES")
-TRUNCATION_NOTE=""
-if [ "$TOTAL_DIFF_LINES" -gt "$MAX_DIFF_LINES" ]; then
-    REMAINING=$((TOTAL_DIFF_LINES - MAX_DIFF_LINES))
-    TRUNCATION_NOTE="[TRUNCATED: $REMAINING more lines not shown. Full diff saved in pr_raw_diff.txt]"
-fi
-
-echo "[3] Building GPT review prompt..."
-# SECURITY: Use quoted heredoc ('EOF') to prevent shell expansion of diff content
-cat <<'STATIC_EOF' > pr_review_prompt.txt
-You are reviewing a GitHub Pull Request as a senior software engineer using Production Review Pipeline v2.
-
-STATIC_EOF
-
-printf 'Repository: %s\n' "$OWNER/$REPO_NAME" >> pr_review_prompt.txt
+echo "[2] Building minimal GPT review prompt (metadata only)..."
+# GPT reads the PR itself via GitHub plugin — only send metadata
+printf 'Repository: %s\n' "$OWNER/$REPO_NAME" > pr_review_prompt.txt
 printf 'Pull Request: %s\n' "$PR_URL" >> pr_review_prompt.txt
 printf 'Commit SHA: %s\n' "$COMMIT_SHA" >> pr_review_prompt.txt
 printf 'Branch: %s\n' "$BRANCH" >> pr_review_prompt.txt
-printf 'PR Title: %s\n\n' "$PR_TITLE" >> pr_review_prompt.txt
-
-printf 'Changed Files:\n%s\n\n' "$CHANGED_FILES" >> pr_review_prompt.txt
-
-printf 'COMPACT GIT DIFF SUMMARY:\n' >> pr_review_prompt.txt
-printf '%s\n' "$COMPACT_DIFF" >> pr_review_prompt.txt
-if [ -n "$TRUNCATION_NOTE" ]; then
-    printf '%s\n' "$TRUNCATION_NOTE" >> pr_review_prompt.txt
-fi
-
-cat <<'STATIC_EOF' >> pr_review_prompt.txt
-
-Please inspect the PR details & diff above and evaluate the changes.
-
-Output Requirements:
-At the very beginning output EXACTLY one of:
-
-REVIEW_STATUS: APPROVED
-
-or
-
-REVIEW_STATUS: CHANGES_REQUESTED
-
-If CHANGES_REQUESTED, output findings using EXACTLY:
-
-[FINDING]
-Severity: CRITICAL|HIGH|MEDIUM|LOW
-File: path/to/file
-Problem: <specific problem>
-Evidence: <concrete execution path / call sequence>
-Failure scenario: <realistic failure scenario>
-Recommended fix: <practical code snippet or implementation approach>
-[/FINDING]
-
-After all findings, provide a concise review summary.
-STATIC_EOF
+printf 'PR Title: %s\n' "$PR_TITLE" >> pr_review_prompt.txt
 
 echo -e "\n=== DONE - Prompt written to: pr_review_prompt.txt ($(wc -l < pr_review_prompt.txt) lines) ==="
 
