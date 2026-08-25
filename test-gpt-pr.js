@@ -120,11 +120,9 @@ async function runGptReview(options = {}) {
   // Trigger key events to ensure React state enables send button
   await chatPage.keyboard.type(' ');
   await chatPage.keyboard.press('Backspace');
-  await chatPage.waitForTimeout(1000);
-
-  let lastAssistantBefore = null;
-  if (await assistantMessages.count() > 0) {
-    lastAssistantBefore = await assistantMessages.last().innerText();
+  let lastMessageId = null;
+  if (await chatPage.locator(assistantSelector).count() > 0) {
+    lastMessageId = await chatPage.locator(assistantSelector).last().getAttribute('data-message-id');
   }
 
   const sendBtnSelectors = [
@@ -154,19 +152,32 @@ async function runGptReview(options = {}) {
   let generationComplete = false;
   let lastText = '';
   let stableCount = 0;
+  let newMessageId = null;
 
   for (let i = 0; i < 90; i++) {
     await chatPage.waitForTimeout(2000);
-    const currentMessage = chatPage.locator(assistantSelector).last();
-    if (await currentMessage.count() === 0) continue;
     
-    const currentText = await currentMessage.innerText();
+    if (!newMessageId) {
+      const allMessages = chatPage.locator(assistantSelector);
+      if (await allMessages.count() === 0) continue;
+      
+      const candidateId = await allMessages.last().getAttribute('data-message-id');
+      if (candidateId && candidateId !== lastMessageId) {
+        newMessageId = candidateId;
+        console.log(`[+] Detected new assistant message (ID: ${newMessageId})`);
+      } else {
+        console.log(`[-] Waiting for new assistant message to appear...`);
+        continue;
+      }
+    }
     
-    // If the last message is still the old one, keep waiting
-    if (currentText === lastAssistantBefore && lastAssistantBefore !== null) {
-      console.log(`[-] Waiting for new assistant message to appear...`);
+    const currentMessage = chatPage.locator(`div[data-message-id="${newMessageId}"]`);
+    if (await currentMessage.count() === 0) {
+      console.log(`[-] New message temporarily disappeared from DOM (virtualization)...`);
       continue;
     }
+    
+    const currentText = await currentMessage.innerText();
     
     if (currentText === lastText && currentText.trim().length > 0) {
       stableCount++;
@@ -191,7 +202,7 @@ async function runGptReview(options = {}) {
 
   console.log('[6] Reading response...');
   
-  const resultText = await chatPage.locator(assistantSelector).last().innerText();
+  const resultText = await chatPage.locator(`div[data-message-id="${newMessageId}"]`).innerText();
   console.log('\n--- GPT RESPONSE ---\n' + resultText + '\n--------------------\n');
   
   if (outputFile) {
