@@ -131,26 +131,26 @@ async function runGptReview(options = {}) {
     await chatPage.keyboard.press('Enter');
   }
 
-  console.log('[5] Waiting for GPT to generate review response (smart polling)...');
-  let lastText = '';
-  let stableCount = 0;
-  for (let i = 0; i < 60; i++) {
-    await chatPage.waitForTimeout(2000); // 2s polling interval, max 120s
-    const currentCount = await chatPage.locator(assistantSelector).count();
-    if (currentCount > beforeCount) {
-      const msg = chatPage.locator(assistantSelector).nth(currentCount - 1);
-      const currentText = await msg.innerText();
-      if (currentText && currentText === lastText) {
-        stableCount++;
-        if (stableCount >= 2) {
-          console.log('[-] Response text stabilized. Generation complete.');
+  console.log('[5] Waiting for GPT to finish generating review response (checking send button state)...');
+  try {
+    // Check every 2s if the send button is enabled again (meaning generation stopped)
+    for (let i = 0; i < 60; i++) {
+      await chatPage.waitForTimeout(2000);
+      let btnEnabled = false;
+      for (const sSel of sendBtnSelectors) {
+        const btn = chatPage.locator(sSel).last();
+        if (await btn.count() > 0 && await btn.isVisible() && await btn.isEnabled()) {
+          btnEnabled = true;
           break;
         }
-      } else {
-        stableCount = 0;
-        lastText = currentText;
+      }
+      if (btnEnabled) {
+        console.log('[-] Generation complete signal detected (Send button re-enabled).');
+        break;
       }
     }
+  } catch (e) {
+    console.log('[-] Timeout waiting for send button, proceeding...');
   }
 
   console.log('[6] Reading response...');
@@ -174,7 +174,8 @@ async function runGptReview(options = {}) {
       console.log(`[+] Saved GPT Response to: ${resolvedOutputPath}`);
     }
 
-    const match = resultText.match(/^REVIEW_STATUS:\s*(APPROVED|CHANGES_REQUESTED)\s*$/im);
+    // Securely parse the FIRST occurrence of the verdict to avoid false-positives from inline examples
+    const match = resultText.match(/(?:REVIEW_STATUS|Verdict|Final):\s*(APPROVED|CHANGES_REQUESTED|UNKNOWN)/i);
     const status = match ? match[1].toUpperCase() : 'UNKNOWN';
 
     return {
