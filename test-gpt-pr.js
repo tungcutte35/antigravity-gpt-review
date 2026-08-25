@@ -6,7 +6,9 @@ const http = require('http');
 
 async function ensureCdpRunning() {
   const checkPort = () => new Promise((resolve) => {
-    const req = http.get('http://127.0.0.1:9222/json/version', () => resolve(true));
+    const req = http.get('http://127.0.0.1:9222/json/version', (res) => {
+      resolve(res.statusCode === 200);
+    });
     req.on('error', () => resolve(false));
     req.end();
   });
@@ -203,7 +205,7 @@ if (require.main === module) {
     try {
       const args = process.argv.slice(2);
       const diffFilePath = args.find(a => !a.startsWith('--')) || 'pr_review_prompt.txt';
-      const forceNewChat = !args.includes('--reuse-chat');
+      const forceNewChat = args.includes('--new-chat');
 
       const result = await runGptReview({ diffFilePath, forceNewChat });
       console.log(`\n📌 Parsed GPT Status: ${result.status}`);
