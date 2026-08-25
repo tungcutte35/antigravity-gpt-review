@@ -28,7 +28,7 @@ const { runClaudeReview } = require('./test-claude-pr');
     try {
       gptResult = await runGptReview({
         diffFilePath,
-        forceNewChat,
+        forceNewChat: true,
         outputFile: 'gpt_review_response.txt'
       });
       console.log(`[Stage 1 Complete] ChatGPT Status: ${gptResult.status}\n`);

@@ -56,25 +56,6 @@ index 0e51931..a4a3877 100644
  
  ---
  
-diff --git a/gpt_review_response.txt b/gpt_review_response.txt
-new file mode 100644
-index 0000000..eb2502b
---- /dev/null
-+++ b/gpt_review_response.txt
-@@ -0,0 +1,12 @@
-+REVIEW_STATUS: CHANGES_REQUESTED
-+
-+[FINDING]
-+Severity: HIGH
-+File: test-claude-pr.js
-+Problem: The requested PR revision cannot be verified from the GitHub state currently exposed by the repository: the supplied commit fdc6be95e60b88e8f913cecdd7939a6dc27c2a75 is not resolvable, and the referenced feature/claude-review-flow branch is also absent. Because the actual revision cannot be inspected, approving the change would violate the Evidence Gate.
-+Evidence: GitHub repository metadata resolves successfully, but fetching the supplied commit returns No commit found for ref fdc6be95e60b88e8f913cecdd7939a6dc27c2a75; searching repository branches also returns no feature/claude-review-flow branch. Therefore the changed files listed in the request cannot be independently traced to the claimed commit.
-+Failure scenario: The review is performed against an assumed or stale diff rather than the actual fdc6be9 revision. Any finding—or approval—could therefore describe code that is not present in the submitted commit, making the review result unreliable.
-+Recommended fix: Push/publish the claimed commit and branch to GitHub, or provide an accessible PR number/commit containing the revision. Once the commit is resolvable, re-run the review against the actual changed files and diff before merging.
-+[/FINDING]
-+
-+Review summary: I cannot safely evaluate the claimed fdc6be95 revision because GitHub currently cannot resolve either the commit or branch. Under the Production Review Pipeline v2 Evidence Gate, this is insufficient evidence for an approval.
-\ No newline at end of file
 diff --git a/package.json b/package.json
 index 2deb9df..bb6356b 100644
 --- a/package.json
@@ -93,10 +74,10 @@ index 2deb9df..bb6356b 100644
    "author": "tungcutte35",
 diff --git a/pr_raw_diff.txt b/pr_raw_diff.txt
 new file mode 100644
-index 0000000..391b410
+index 0000000..2a31eb0
 --- /dev/null
 +++ b/pr_raw_diff.txt
-@@ -0,0 +1,844 @@
+@@ -0,0 +1,1684 @@
 +diff --git a/README.md b/README.md
 +index 0e51931..a4a3877 100644
 +--- a/README.md
@@ -157,43 +138,22 @@ index 0000000..391b410
 + 
 +diff --git a/gpt_review_response.txt b/gpt_review_response.txt
 +new file mode 100644
-+index 0000000..7852506
++index 0000000..eb2502b
 +--- /dev/null
 ++++ b/gpt_review_response.txt
-+@@ -0,0 +1,33 @@
++@@ -0,0 +1,12 @@
 ++REVIEW_STATUS: CHANGES_REQUESTED
 ++
 ++[FINDING]
 ++Severity: HIGH
 ++File: test-claude-pr.js
-++Problem: The Claude CDP connection and navigation URLs are malformed. They are written as Markdown link syntax ([http://127.0.0.1:9222](http://127.0.0.1:9222) and [https://claude.ai/new](https://claude.ai/new)) rather than actual URLs, so Playwright receives an invalid URL.
-++Evidence: runClaudeReview() calls chromium.connectOverCDP('[http://127.0.0.1:9222](http://127.0.0.1:9222)'). When a Claude page is absent it subsequently calls claudePage.goto('[https://claude.ai/new](https://claude.ai/new)', ...). Both calls execute directly in the new Stage-2 path before any prompt submission occurs.
-++Failure scenario: Running npm run review:claude or Stage 2 of npm run review:dual reaches [1] Connecting to Chrome CDP (Claude.ai)... and Playwright rejects the malformed CDP endpoint/URL instead of connecting or navigating to Claude. The new Claude review flow therefore cannot complete.
-++Recommended fix: Use literal URLs in JavaScript:
-++chromium.connectOverCDP('http://127.0.0.1:9222')
-++and
-++claudePage.goto('https://claude.ai/new', { waitUntil: 'domcontentloaded' }).
+++Problem: The requested PR revision cannot be verified from the GitHub state currently exposed by the repository: the supplied commit fdc6be95e60b88e8f913cecdd7939a6dc27c2a75 is not resolvable, and the referenced feature/claude-review-flow branch is also absent. Because the actual revision cannot be inspected, approving the change would violate the Evidence Gate.
+++Evidence: GitHub repository metadata resolves successfully, but fetching the supplied commit returns No commit found for ref fdc6be95e60b88e8f913cecdd7939a6dc27c2a75; searching repository branches also returns no feature/claude-review-flow branch. Therefore the changed files listed in the request cannot be independently traced to the claimed commit.
+++Failure scenario: The review is performed against an assumed or stale diff rather than the actual fdc6be9 revision. Any finding—or approval—could therefore describe code that is not present in the submitted commit, making the review result unreliable.
+++Recommended fix: Push/publish the claimed commit and branch to GitHub, or provide an accessible PR number/commit containing the revision. Once the commit is resolvable, re-run the review against the actual changed files and diff before merging.
 ++[/FINDING]
 ++
-++[FINDING]
-++Severity: HIGH
-++File: test-dual-pr.js
-++Problem: A failed ChatGPT Stage 1 can cause Claude Stage 2 to consume a stale gpt_review_response.txt from a previous run, making the final verdict depend on an unrelated historical review.
-++Evidence: Stage 1 errors are caught and execution continues: catch (gptErr) { ... Proceeding to Stage 2 with diff context only... }. However, Stage 2 always calls runClaudeReview({ gptResponseFilePath: 'gpt_review_response.txt', ... }), and runClaudeReview() loads that file whenever it exists. There is no deletion, truncation, or run-specific validation of the file when Stage 1 fails.
-++Failure scenario: Run the dual pipeline successfully once, producing gpt_review_response.txt. On a subsequent run, ChatGPT fails before producing a new response (CDP/UI failure, timeout, etc.). The old file remains, Stage 2 loads it, and Claude receives the current diff combined with stale findings from the previous PR/review. Claude can therefore confirm or reject findings based on obsolete evidence while the console claims it is proceeding with "diff context only."
-++Recommended fix: Make the Stage-1 result explicit and only pass its response to Claude when it was generated during the current invocation. For example, initialize/remove the output before Stage 1, then pass gptResponseFilePath: null or an in-memory gptResult.resultText when Stage 1 fails. Prefer passing the Stage-1 response directly to runClaudeReview() rather than using a persistent filename as implicit state.
-++[/FINDING]
-++
-++[FINDING]
-++Severity: MEDIUM
-++File: test-claude-pr.js
-++Problem: Claude response completion is inferred solely from the presence/absence of a UI-specific Stop button, with no validation that the extracted response contains the required final verdict before the pipeline treats the run as completed.
-++Evidence: After a fixed 5-second delay, the loop checks only button[aria-label*="Stop"], button:has-text("Stop response"). If neither selector matches, the loop immediately proceeds to response extraction. The extraction then falls back to document.body.innerText, and the status parser converts any response without the exact REVIEW_STATUS line to UNKNOWN.
-++Failure scenario: Claude changes its DOM/ARIA label, the Stop button is temporarily absent, or the response is still streaming while the selector is unavailable. The script reads a partial response, writes it to claude_review_response.txt, parses UNKNOWN, and terminates with a rejected review even though Claude may subsequently produce the required verdict. This makes the automated gate dependent on an unstable UI implementation detail.
-++Recommended fix: Track the submitted prompt and wait for a new assistant response whose text stabilizes across successive polls, or wait for a known Claude completion state. After extraction, explicitly require REVIEW_STATUS: APPROVED|CHANGES_REQUESTED; otherwise continue polling until the timeout rather than immediately treating a partial/unknown response as the final result.
-++[/FINDING]
-++
-++Review summary: The dual-stage architecture is reasonable, but the new Claude stage has a deterministic URL construction defect, and the runner has a concrete stale-artifact failure path. Both can invalidate the claimed final-review gate, so the change should not be approved as-is.
+++Review summary: I cannot safely evaluate the claimed fdc6be95 revision because GitHub currently cannot resolve either the commit or branch. Under the Production Review Pipeline v2 Evidence Gate, this is insufficient evidence for an approval.
 +\ No newline at end of file
 +diff --git a/package.json b/package.json
 +index 2deb9df..bb6356b 100644
@@ -211,11 +171,861 @@ index 0000000..391b410
 +   },
 +   "keywords": [],
 +   "author": "tungcutte35",
++diff --git a/pr_raw_diff.txt b/pr_raw_diff.txt
++new file mode 100644
++index 0000000..391b410
++--- /dev/null
+++++ b/pr_raw_diff.txt
++@@ -0,0 +1,844 @@
+++diff --git a/README.md b/README.md
+++index 0e51931..a4a3877 100644
+++--- a/README.md
++++++ b/README.md
+++@@ -93,12 +93,30 @@ Chạy script để commit code hiện tại (nếu cần), tạo Pull Request l
+++   .\scripts\github-pr.ps1
+++   ```
+++ 
+++-### Bước 3: Gửi Review cho ChatGPT
+++-Script Node.js sẽ kết nối với trình duyệt đang mở ở cổng `9222`, lấy nội dung từ `pr_review_prompt.txt`, dán vào tab ChatGPT, gửi đi và đợi kết quả.
+++-```bash
+++-node test-gpt-pr.js
+++-```
+++-Nếu review thành công và không có lỗi nghiêm trọng, script sẽ trả về `Exit Code 0` (APPROVED). Nếu có lỗi cần sửa, script trả về `Exit Code 1` (CHANGES_REQUESTED).
++++### Bước 3: Gửi Review (ChatGPT / Claude / Dual Review)
++++Script Node.js kết nối với trình duyệt đang mở ở cổng `9222`:
++++
++++- **Chỉ review bằng ChatGPT Web:**
++++  ```bash
++++  npm run review:gpt
++++  # hoặc: node test-gpt-pr.js
++++  ```
++++
++++- **Chỉ review bằng Claude Web (`https://claude.ai/new`):**
++++  ```bash
++++  npm run review:claude
++++  # hoặc: node test-claude-pr.js
++++  ```
++++
++++- **Review 2 Lớp Nâng Cao (ChatGPT -> Claude.ai):**
++++  ```bash
++++  npm run review:dual
++++  # hoặc: node test-dual-pr.js
++++  ```
++++  *Luồng Dual-Stage:*
++++  1. ChatGPT tiến hành review lớp 1 và lưu kết quả vào `gpt_review_response.txt`.
++++  2. Toàn bộ diff + kết quả của ChatGPT được gửi sang **Claude Web (`https://claude.ai/new`)** để thẩm định lại (Verification & Consensus Gate).
++++  3. **Claude.ai đưa ra VERDICT cuối cùng (`APPROVED` hoặc `CHANGES_REQUESTED`)**.
+++ 
+++ ---
+++ 
+++@@ -113,10 +131,14 @@ Nếu bạn đang sử dụng môi trường Antigravity IDE, bạn có thể g
+++ 
+++ | File / Folder | Chức năng |
+++ |---|---|
+++-| `scripts/test-cdp.*` | Script khởi động Google Chrome độc lập ở cổng **9222** với profile riêng. |
++++| `scripts/test-cdp.*` | Script khởi động Google Chrome độc lập ở cổng **9222** (tự động mở tab ChatGPT & Claude.ai/new). |
+++ | `scripts/github-pr.*` | Tự động lấy Git Token, tạo/cập nhật PR và xuất file `pr_review_prompt.txt` theo chuẩn v2. |
+++-| `test-gpt-pr.js` | Script Node.js (Playwright) kết nối CDP, tương tác với giao diện ChatGPT Web để submit code và parse kết quả. |
++++| `test-gpt-pr.js` | Script kết nối CDP tương tác với ChatGPT Web (Pha 1). |
++++| `test-claude-pr.js` | Script kết nối CDP tương tác với Claude Web `https://claude.ai/new` (Pha 2 thẩm định). |
++++| `test-dual-pr.js` | Runner tổng hợp điều phối luồng review 2 lớp liên hoàn ChatGPT -> Claude.ai. |
+++ | `pr_review_prompt.txt`| File lưu trữ prompt sinh ra tạm thời, chứa metadata và git diff của PR. |
++++| `gpt_review_response.txt` | File lưu kết quả review sơ bộ của ChatGPT. |
++++| `claude_review_response.txt` | File lưu kết quả thẩm định cuối cùng của Claude.ai. |
+++ 
+++ ---
+++ 
+++diff --git a/gpt_review_response.txt b/gpt_review_response.txt
+++new file mode 100644
+++index 0000000..7852506
+++--- /dev/null
++++++ b/gpt_review_response.txt
+++@@ -0,0 +1,33 @@
++++REVIEW_STATUS: CHANGES_REQUESTED
++++
++++[FINDING]
++++Severity: HIGH
++++File: test-claude-pr.js
++++Problem: The Claude CDP connection and navigation URLs are malformed. They are written as Markdown link syntax ([http://127.0.0.1:9222](http://127.0.0.1:9222) and [https://claude.ai/new](https://claude.ai/new)) rather than actual URLs, so Playwright receives an invalid URL.
++++Evidence: runClaudeReview() calls chromium.connectOverCDP('[http://127.0.0.1:9222](http://127.0.0.1:9222)'). When a Claude page is absent it subsequently calls claudePage.goto('[https://claude.ai/new](https://claude.ai/new)', ...). Both calls execute directly in the new Stage-2 path before any prompt submission occurs.
++++Failure scenario: Running npm run review:claude or Stage 2 of npm run review:dual reaches [1] Connecting to Chrome CDP (Claude.ai)... and Playwright rejects the malformed CDP endpoint/URL instead of connecting or navigating to Claude. The new Claude review flow therefore cannot complete.
++++Recommended fix: Use literal URLs in JavaScript:
++++chromium.connectOverCDP('http://127.0.0.1:9222')
++++and
++++claudePage.goto('https://claude.ai/new', { waitUntil: 'domcontentloaded' }).
++++[/FINDING]
++++
++++[FINDING]
++++Severity: HIGH
++++File: test-dual-pr.js
++++Problem: A failed ChatGPT Stage 1 can cause Claude Stage 2 to consume a stale gpt_review_response.txt from a previous run, making the final verdict depend on an unrelated historical review.
++++Evidence: Stage 1 errors are caught and execution continues: catch (gptErr) { ... Proceeding to Stage 2 with diff context only... }. However, Stage 2 always calls runClaudeReview({ gptResponseFilePath: 'gpt_review_response.txt', ... }), and runClaudeReview() loads that file whenever it exists. There is no deletion, truncation, or run-specific validation of the file when Stage 1 fails.
++++Failure scenario: Run the dual pipeline successfully once, producing gpt_review_response.txt. On a subsequent run, ChatGPT fails before producing a new response (CDP/UI failure, timeout, etc.). The old file remains, Stage 2 loads it, and Claude receives the current diff combined with stale findings from the previous PR/review. Claude can therefore confirm or reject findings based on obsolete evidence while the console claims it is proceeding with "diff context only."
++++Recommended fix: Make the Stage-1 result explicit and only pass its response to Claude when it was generated during the current invocation. For example, initialize/remove the output before Stage 1, then pass gptResponseFilePath: null or an in-memory gptResult.resultText when Stage 1 fails. Prefer passing the Stage-1 response directly to runClaudeReview() rather than using a persistent filename as implicit state.
++++[/FINDING]
++++
++++[FINDING]
++++Severity: MEDIUM
++++File: test-claude-pr.js
++++Problem: Claude response completion is inferred solely from the presence/absence of a UI-specific Stop button, with no validation that the extracted response contains the required final verdict before the pipeline treats the run as completed.
++++Evidence: After a fixed 5-second delay, the loop checks only button[aria-label*="Stop"], button:has-text("Stop response"). If neither selector matches, the loop immediately proceeds to response extraction. The extraction then falls back to document.body.innerText, and the status parser converts any response without the exact REVIEW_STATUS line to UNKNOWN.
++++Failure scenario: Claude changes its DOM/ARIA label, the Stop button is temporarily absent, or the response is still streaming while the selector is unavailable. The script reads a partial response, writes it to claude_review_response.txt, parses UNKNOWN, and terminates with a rejected review even though Claude may subsequently produce the required verdict. This makes the automated gate dependent on an unstable UI implementation detail.
++++Recommended fix: Track the submitted prompt and wait for a new assistant response whose text stabilizes across successive polls, or wait for a known Claude completion state. After extraction, explicitly require REVIEW_STATUS: APPROVED|CHANGES_REQUESTED; otherwise continue polling until the timeout rather than immediately treating a partial/unknown response as the final result.
++++[/FINDING]
++++
++++Review summary: The dual-stage architecture is reasonable, but the new Claude stage has a deterministic URL construction defect, and the runner has a concrete stale-artifact failure path. Both can invalidate the claimed final-review gate, so the change should not be approved as-is.
+++\ No newline at end of file
+++diff --git a/package.json b/package.json
+++index 2deb9df..bb6356b 100644
+++--- a/package.json
++++++ b/package.json
+++@@ -4,7 +4,10 @@
+++   "description": "",
+++   "main": "index.js",
+++   "scripts": {
+++-    "test": "echo \"Error: no test specified\" && exit 1"
++++    "test": "echo \"Error: no test specified\" && exit 1",
++++    "review:gpt": "node test-gpt-pr.js",
++++    "review:claude": "node test-claude-pr.js",
++++    "review:dual": "node test-dual-pr.js"
+++   },
+++   "keywords": [],
+++   "author": "tungcutte35",
+++diff --git a/scripts/github-pr.sh b/scripts/github-pr.sh
+++index 0b77d8a..5e9d95e 100755
+++--- a/scripts/github-pr.sh
++++++ b/scripts/github-pr.sh
+++@@ -54,30 +54,32 @@ if [ -z "$PR_NUMBER" ]; then
+++ fi
+++ 
+++ if [ -z "$PR_NUMBER" ]; then
+++-    echo "Error creating or fetching PR."
+++-    exit 1
++++    echo "    [!] Notice: Could not create PR via GitHub API (branch may not be pushed to remote yet)."
++++    echo "    [!] Proceeding with local git diff prompt generation..."
++++    PR_NUMBER="LOCAL"
++++    PR_URL="Local Branch: $BRANCH (Commit: $COMMIT_SHA)"
++++else
++++    echo "    PR #${PR_NUMBER}: ${PR_URL}"
+++ fi
+++-
+++-echo "    PR #${PR_NUMBER}: ${PR_URL}"
+++ echo "    Commit SHA: ${COMMIT_SHA}"
+++ 
+++-echo "[2] Fetching PR metadata..."
+++-DIFF_TEXT="(Please use your GitHub plugin/tool to read the diff for PR: $PR_URL or review the recent changes. The PR is on branch $BRANCH at commit $COMMIT_SHA)"
++++echo "[2] Fetching PR metadata & full git diff..."
++++ACTUAL_DIFF=$(git diff "$BASE_BRANCH...$BRANCH" 2>/dev/null || git diff HEAD~1 2>/dev/null || echo "No diff available")
++++DIFF_TEXT="$ACTUAL_DIFF"
+++ 
+++-CHANGED_FILES=$(git diff --name-only origin/$BASE_BRANCH...$BRANCH 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null || echo "See diff below")
++++CHANGED_FILES=$(git diff --name-only "$BASE_BRANCH...$BRANCH" 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null || echo "See diff below")
+++ 
+++ RELEVANT_CONTEXT=""
+++ if [ -n "$CHANGED_FILES" ]; then
+++     RELEVANT_CONTEXT=$(git log -n 3 --oneline 2>/dev/null || echo "Recent commits fetched")
+++ fi
+++ 
+++-echo "[3] Building Production Review Pipeline v2 prompt..."
++++echo "$ACTUAL_DIFF" > pr_raw_diff.txt
++++
++++echo "[3] Building concise Production Review Pipeline v2 prompt for ChatGPT..."
+++ cat <<EOF > pr_review_prompt.txt
+++ You are reviewing a GitHub Pull Request as a senior software engineer using Production Review Pipeline v2.
+++ 
+++-==================================================
+++-PHASE 1: DISCOVERY (METADATA, DIFF & CONTEXT)
+++-==================================================
+++ Repository: $OWNER/$REPO_NAME
+++ Pull Request: $PR_URL
+++ Commit SHA: $COMMIT_SHA
+++@@ -87,53 +89,12 @@ PR Title: $PR_TITLE
+++ Changed Files:
+++ $CHANGED_FILES
+++ 
+++-DIFF CONTENT:
+++-$DIFF_TEXT
+++-
+++-RELEVANT CODE CONTEXT:
++++RELEVANT COMMITS:
+++ $RELEVANT_CONTEXT
+++ 
+++-==================================================
+++-PHASE 2: ANALYSIS (12-POINT SYSTEMATIC PROTOCOL)
+++-==================================================
+++-Systematically evaluate the change set across all 12 checkpoints:
+++-1. FUNCTIONAL CORRECTNESS: Happy/failure paths, create/update/delete behavior, boundary inputs, UI operation promises.
+++-2. DATA FLOW & STATE CONSISTENCY: Trace values UI → Local State → Payload → API → Store → UI. Check stale/inconsistent state.
+++-3. API & BACKEND CONTRACT: HTTP method, endpoint, payload shape, create vs update consistency, multipart, nullable fields.
+++-4. EDGE CASES & BOUNDARY CONDITIONS: Empty lists, zero, negative/max values, first/last page, rapid clicks, timeouts, cancellation.
+++-5. CONCURRENCY & ASYNC FLOWS: Race conditions, duplicate requests, stale responses, unmount during request, PENDING → SUCCESS/FAILED.
+++-6. SECURITY: Secrets, IDOR, privilege escalation, client-only auth, XSS, injection.
+++-7. FINANCIAL / BUSINESS DATA SAFETY: Numeric boundaries, balance checks, duplicate submission, idempotency, rounding, totals.
+++-8. PAGINATION / FILTERING / SEARCH: Page/pageSize, total count, filter persistence, global vs current-page totals.
+++-9. ERROR HANDLING & RECOVERY: API errors, partial failures, loading states, stale state recovery.
+++-10. REGRESSION ANALYSIS: Compare previous vs changed behavior (What worked before? What changed? Could users lose functionality?).
+++-11. CODE QUALITY: Only report concrete correctness/maintainability risks. No subjective naming/style nitpicks.
+++-12. TEST COVERAGE: Request minimal reproducible test only for concrete bugs found.
+++-
+++-==================================================
+++-PHASE 3: VERIFICATION (VERIFICATION & EVIDENCE GATE)
+++-==================================================
+++-Filter every candidate finding through the Verification Gate:
+++-Candidate Issue → Can I reproduce it from code? → Is it caused by this PR? → Could existing code prevent it? → Is impact realistic?
+++-
+++-EVIDENCE GATE REQUIREMENT:
+++-Every reported finding MUST contain concrete execution path evidence:
+++-- Trace the exact function calls or state transitions.
+++-- Explain the realistic failure scenario.
+++-- RULE: No concrete evidence → DO NOT output finding. Do not output vague claims like "there might be a race condition".
+++-
+++-==================================================
+++-PHASE 4: VALIDATION (BEHAVIOR MATRIX, BLIND-SPOT & DEDUPLICATION)
+++-==================================================
+++-1. CHANGED BEHAVIOR MATRIX: Mentally construct Flow | Before | After | Risk matrix to catch silent default/behavioral shifts.
+++-2. ROOT CAUSE DEDUPLICATION: Group multiple related symptoms across files into ONE single finding based on the underlying root cause.
+++-3. BLIND-SPOT PASS: Internal audit on file scrutiny, multi-file flows, async races, paginated totals, and UI/backend state drift.
+++-
+++-==================================================
+++-PHASE 5: REPORTING & FINAL VERDICT
+++-==================================================
+++-Do not output REVIEW_STATUS until all 5 phases are complete.
++++Please inspect this PR using your GitHub tools/plugins and evaluate the changes.
+++ 
++++Output Requirements:
+++ At the very beginning output EXACTLY one of:
+++ 
+++ REVIEW_STATUS: APPROVED
+++@@ -153,7 +114,7 @@ Failure scenario: <realistic failure scenario>
+++ Recommended fix: <practical code snippet or implementation approach>
+++ [/FINDING]
+++ 
+++-After all findings, optionally provide a short review summary.
++++After all findings, provide a concise review summary.
+++ EOF
+++ 
+++-echo -e "\n=== DONE - Production Review Pipeline v2 Prompt written to: pr_review_prompt.txt ==="
++++echo -e "\n=== DONE - Concise prompt written to: pr_review_prompt.txt & Raw diff to: pr_raw_diff.txt ==="
+++diff --git a/scripts/test-cdp.ps1 b/scripts/test-cdp.ps1
+++index 273d493..1bf7aa3 100644
+++--- a/scripts/test-cdp.ps1
++++++ b/scripts/test-cdp.ps1
+++@@ -22,7 +22,8 @@ Start-Process -FilePath $chromePath -ArgumentList @(
+++     "--remote-debugging-port=9222",
+++     "--user-data-dir=`"$chromeDir`"",
+++     "--no-first-run",
+++-    "https://chatgpt.com"
++++    "https://chatgpt.com",
++++    "https://claude.ai/new"
+++ )
+++ 
+++ Write-Host "[3] Waiting 5 seconds for Chrome to start..."
+++diff --git a/scripts/test-cdp.sh b/scripts/test-cdp.sh
+++index a81a76e..69a14b1 100755
+++--- a/scripts/test-cdp.sh
++++++ b/scripts/test-cdp.sh
+++@@ -29,7 +29,8 @@ else
+++         --remote-debugging-port=9222 \
+++         --user-data-dir="$CHROME_DIR" \
+++         --no-first-run \
+++-        "https://chatgpt.com" </dev/null >/dev/null 2>&1 &
++++        "https://chatgpt.com" \
++++        "https://claude.ai/new" </dev/null >/dev/null 2>&1 &
+++     
+++     echo "[3] Waiting 4 seconds for Chrome to start..."
+++     sleep 4
+++diff --git a/test-claude-pr.js b/test-claude-pr.js
+++new file mode 100644
+++index 0000000..4e4f30c
+++--- /dev/null
++++++ b/test-claude-pr.js
+++@@ -0,0 +1,259 @@
++++const { chromium } = require('playwright');
++++const fs = require('fs');
++++const path = require('path');
++++
++++async function runClaudeReview(options = {}) {
++++  const {
++++    diffFilePath = 'pr_review_prompt.txt',
++++    gptResponseFilePath = 'gpt_review_response.txt',
++++    outputFile = 'claude_review_response.txt',
++++    forceNewChat = true
++++  } = options;
++++
++++  const resolvedDiffPath = path.resolve(diffFilePath);
++++  const resolvedGptPath = path.resolve(gptResponseFilePath);
++++
++++  if (!fs.existsSync(resolvedDiffPath)) {
++++    throw new Error(`File not found -> ${resolvedDiffPath}`);
++++  }
++++
++++  let gptResponseText = options.gptResponseText || '';
++++  if (!gptResponseText && gptResponseFilePath && fs.existsSync(resolvedGptPath)) {
++++    gptResponseText = fs.readFileSync(resolvedGptPath, 'utf-8');
++++  }
++++
++++  const rawDiffPath = path.resolve('pr_raw_diff.txt');
++++  let fullDiffText = '';
++++  if (fs.existsSync(rawDiffPath)) {
++++    fullDiffText = fs.readFileSync(rawDiffPath, 'utf-8');
++++  }
++++
++++  // Build combined 2nd-pass audit prompt
++++  let combinedPrompt = promptDiffText;
++++  if (gptResponseText) {
++++    combinedPrompt = `You are a Lead Software Architect conducting a final 2nd-pass Code Review (Verification & Consensus Gate).
++++
++++Below is the Pull Request Review metadata, code diff, and first-pass review findings generated by ChatGPT Web.
++++
++++==================================================
++++1. ORIGINAL PR METADATA & DIFF
++++==================================================
++++${promptDiffText}
++++
++++FULL GIT DIFF:
++++${fullDiffText}
++++
++++==================================================
++++2. CHATGPT FIRST-PASS REVIEW RESPONSE
++++==================================================
++++${gptResponseText}
++++
++++==================================================
++++3. YOUR SECOND-PASS VERIFICATION & AUDIT INSTRUCTIONS
++++==================================================
++++As the Final Auditor and Senior Lead Architect, perform a 2nd-pass review:
++++1. Verify each finding reported by ChatGPT against the code diff and context (Evidence Gate).
++++2. Filter out false positives, hallucinated errors, or subjective nitpicks.
++++3. Identify any critical security, financial, logic, or state bugs that ChatGPT missed.
++++4. Output your FINAL VERDICT at the VERY BEGINNING of your response on its own line:
++++
++++REVIEW_STATUS: APPROVED
++++
++++or
++++
++++REVIEW_STATUS: CHANGES_REQUESTED
++++
++++If CHANGES_REQUESTED, output the verified/final findings using EXACTLY:
++++
++++[FINDING]
++++Severity: CRITICAL|HIGH|MEDIUM|LOW
++++File: path/to/file
++++Problem: <specific problem>
++++Evidence: <concrete execution path / call sequence>
++++Failure scenario: <realistic failure scenario>
++++Recommended fix: <practical code snippet or implementation approach>
++++[/FINDING]
++++
++++After all findings, provide a concise summary explaining your verdict.
++++`;
++++  }
++++
++++  console.log('[1] Connecting to Chrome CDP (Claude.ai)...');
++++  const browser = await chromium.connectOverCDP('http://127.0.0.1:9222');
++++  
++++  const contexts = browser.contexts();
++++  const allPages = contexts.flatMap(c => c.pages());
++++  let claudePage = allPages.find(p => p.url().includes('claude.ai'));
++++
++++  if (forceNewChat || !claudePage) {
++++    console.log('[2] Navigating to https://claude.ai/new for a clean chat session...');
++++    if (!claudePage) {
++++      const context = contexts[0] || await browser.newContext();
++++      claudePage = await context.newPage();
++++    }
++++    await claudePage.goto('https://claude.ai/new', { waitUntil: 'domcontentloaded' });
++++    await claudePage.waitForTimeout(4000);
++++  } else {
++++    console.log('[2] Reusing existing Claude chat session...');
++++  }
++++
++++  await claudePage.bringToFront();
++++
++++  console.log('[3] Finding Claude prompt input element...');
++++  
++++  // Try candidate selectors for Claude input
++++  const candidateSelectors = [
++++    'div[contenteditable="true"]',
++++    '.ProseMirror',
++++    'fieldset div[contenteditable="true"]',
++++    'div[aria-label*="Write"]',
++++    'div[aria-label*="Claude"]',
++++    'textarea'
++++  ];
++++
++++  let inputSelector = null;
++++  for (const sel of candidateSelectors) {
++++    if (await claudePage.locator(sel).count() > 0 && await claudePage.locator(sel).first().isVisible()) {
++++      inputSelector = sel;
++++      break;
++++    }
++++  }
++++
++++  if (!inputSelector) {
++++    console.log('[-] Waiting for contenteditable selector on Claude...');
++++    await claudePage.waitForSelector('div[contenteditable="true"], .ProseMirror', { state: 'visible', timeout: 15000 });
++++    inputSelector = 'div[contenteditable="true"], .ProseMirror';
++++  }
++++
++++  console.log(`[4] Typing prompt into Claude (${inputSelector})...`);
++++  const inputEl = claudePage.locator(inputSelector).first();
++++  await inputEl.click();
++++
++++  await claudePage.evaluate(([sel, text]) => {
++++    const el = document.querySelector(sel);
++++    if (!el) return;
++++    el.focus();
++++    if (el.isContentEditable) {
++++      document.execCommand('insertText', false, text);
++++    } else {
++++      el.value = text;
++++    }
++++    el.dispatchEvent(new Event('input', { bubbles: true }));
++++    el.dispatchEvent(new Event('change', { bubbles: true }));
++++  }, [inputSelector, combinedPrompt]);
++++
++++  await claudePage.waitForTimeout(1500);
++++
++++  // Find send button
++++  console.log('[5] Clicking Send button on Claude...');
++++  const sendSelectors = [
++++    'button[aria-label*="Send"]',
++++    'button[aria-label*="send"]',
++++    'fieldset button:has(svg)',
++++    'button:has(svg[aria-label*="Send"])'
++++  ];
++++
++++  let sent = false;
++++  for (const sSel of sendSelectors) {
++++    const btn = claudePage.locator(sSel).last();
++++    if (await btn.count() > 0 && await btn.isVisible()) {
++++      await btn.click();
++++      sent = true;
++++      break;
++++    }
++++  }
++++
++++  if (!sent) {
++++    console.log('[+] Send button not directly found, pressing Enter...');
++++    await claudePage.keyboard.press('Enter');
++++  }
++++
++++  console.log('[6] Waiting for Claude response streaming to complete...');
++++  
++++  // Wait up to 120s for Claude streaming to start and finish
++++  await claudePage.waitForTimeout(5000);
++++
++++  // Monitor stop button or streaming attribute
++++  let checkCount = 0;
++++  while (checkCount < 30) {
++++    const stopBtn = claudePage.locator('button[aria-label*="Stop"], button:has-text("Stop response")');
++++    const isStreaming = await stopBtn.count() > 0 && await stopBtn.first().isVisible();
++++    if (!isStreaming) {
++++      break;
++++    }
++++    await claudePage.waitForTimeout(3000);
++++    checkCount++;
++++  }
++++
++++  await claudePage.waitForTimeout(5000);
++++
++++  console.log('[7] Reading Claude response...');
++++  
++++  // Extract response text from Claude
++++  const responseSelectors = [
++++    '.font-claude-message',
++++    'div[data-is-streaming]',
++++    'div.grid',
++++    '.prose'
++++  ];
++++
++++  let resultText = '';
++++  for (const rSel of responseSelectors) {
++++    const msgs = claudePage.locator(rSel);
++++    const count = await msgs.count();
++++    if (count > 0) {
++++      resultText = await msgs.nth(count - 1).innerText();
++++      if (resultText && resultText.trim().length > 20) {
++++        break;
++++      }
++++    }
++++  }
++++
++++  if (!resultText) {
++++    resultText = await claudePage.evaluate(() => document.body.innerText);
++++  }
++++
++++  console.log('\n--- CLAUDE RESPONSE ---\n' + resultText + '\n-----------------------\n');
++++
++++  if (outputFile) {
++++    const resolvedOutputPath = path.resolve(outputFile);
++++    fs.writeFileSync(resolvedOutputPath, resultText, 'utf-8');
++++    console.log(`[+] Saved Claude Response to: ${resolvedOutputPath}`);
++++  }
++++
++++  const match = resultText.match(/^REVIEW_STATUS:\s*(APPROVED|CHANGES_REQUESTED)\s*$/im);
++++  const status = match ? match[1].toUpperCase() : 'UNKNOWN';
++++
++++  return {
++++    status,
++++    resultText,
++++    browser
++++  };
++++}
++++
++++module.exports = { runClaudeReview };
++++
++++// Standalone execution
++++if (require.main === module) {
++++  (async () => {
++++    try {
++++      const args = process.argv.slice(2);
++++      const diffFilePath = args.find(a => !a.startsWith('--')) || 'pr_review_prompt.txt';
++++      const gptResponseFilePath = 'gpt_review_response.txt';
++++
++++      const result = await runClaudeReview({ diffFilePath, gptResponseFilePath });
++++      console.log(`\n📌 Parsed Claude Final Status: ${result.status}`);
++++
++++      if (result.status === 'APPROVED') {
++++        console.log('✅ Claude Code Review Verdict: APPROVED!');
++++        process.exit(0);
++++      } else {
++++        console.log('❌ Claude Code Review Verdict: CHANGES_REQUESTED (or UNKNOWN)!');
++++        process.exit(1);
++++      }
++++    } catch (err) {
++++      console.error('ERROR in test-claude-pr:', err);
++++      process.exit(1);
++++    }
++++  })();
++++}
+++diff --git a/test-dual-pr.js b/test-dual-pr.js
+++new file mode 100644
+++index 0000000..5c22204
+++--- /dev/null
++++++ b/test-dual-pr.js
+++@@ -0,0 +1,68 @@
++++const path = require('path');
++++const fs = require('fs');
++++const { runGptReview } = require('./test-gpt-pr');
++++const { runClaudeReview } = require('./test-claude-pr');
++++
++++(async () => {
++++  try {
++++    const args = process.argv.slice(2);
++++    const diffFilePath = args.find(a => !a.startsWith('--')) || 'pr_review_prompt.txt';
++++    const forceNewChat = args.includes('--new-chat');
++++
++++    const gptOutputFile = path.resolve('gpt_review_response.txt');
++++    const claudeOutputFile = path.resolve('claude_review_response.txt');
++++
++++    // Clean up stale files before running
++++    if (fs.existsSync(gptOutputFile)) fs.unlinkSync(gptOutputFile);
++++    if (fs.existsSync(claudeOutputFile)) fs.unlinkSync(claudeOutputFile);
++++
++++    console.log('==================================================');
++++    console.log('🚀 DUAL-STAGE REVIEW PIPELINE: ChatGPT -> Claude.ai');
++++    console.log('==================================================\n');
++++
++++    console.log('--------------------------------------------------');
++++    console.log('STAGE 1: ChatGPT First-Pass Code Review');
++++    console.log('--------------------------------------------------');
++++    
++++    let gptResult = null;
++++    try {
++++      gptResult = await runGptReview({
++++        diffFilePath,
++++        forceNewChat,
++++        outputFile: 'gpt_review_response.txt'
++++      });
++++      console.log(`[Stage 1 Complete] ChatGPT Status: ${gptResult.status}\n`);
++++    } catch (gptErr) {
++++      console.error('[-] Stage 1 (ChatGPT) encountered an error:', gptErr.message);
++++      console.log('[!] Proceeding to Stage 2 with diff context only...');
++++    }
++++
++++    console.log('--------------------------------------------------');
++++    console.log('STAGE 2: Claude.ai Second-Pass Audit & Final Verdict');
++++    console.log('--------------------------------------------------');
++++
++++    const claudeResult = await runClaudeReview({
++++      diffFilePath,
++++      gptResponseText: gptResult ? gptResult.resultText : '',
++++      gptResponseFilePath: gptResult ? 'gpt_review_response.txt' : null,
++++      outputFile: 'claude_review_response.txt',
++++      forceNewChat: true
++++    });
++++
++++    console.log('==================================================');
++++    console.log(`📌 FINAL VERDICT (Decided by Claude.ai): ${claudeResult.status}`);
++++    console.log('==================================================\n');
++++
++++    if (claudeResult.status === 'APPROVED') {
++++      console.log('✅ Dual-Stage Code Review APPROVED!');
++++      process.exit(0);
++++    } else {
++++      console.log('❌ Dual-Stage Code Review CHANGES_REQUESTED!');
++++      process.exit(1);
++++    }
++++
++++  } catch (err) {
++++    console.error('CRITICAL ERROR in test-dual-pr:', err);
++++    process.exit(1);
++++  }
++++})();
+++diff --git a/test-gpt-pr.js b/test-gpt-pr.js
+++index fef75c6..70f43e0 100644
+++--- a/test-gpt-pr.js
++++++ b/test-gpt-pr.js
+++@@ -2,122 +2,140 @@ const { chromium } = require('playwright');
+++ const fs = require('fs');
+++ const path = require('path');
+++ 
+++-(async () => {
+++-  try {
+++-    const args = process.argv.slice(2);
+++-    let diffFilePath = args.find(a => !a.startsWith('--')) || 'pr_review_prompt.txt';
+++-    const forceNewChat = args.includes('--new-chat');
++++async function runGptReview(options = {}) {
++++  const {
++++    diffFilePath = 'pr_review_prompt.txt',
++++    forceNewChat = false,
++++    outputFile = 'gpt_review_response.txt'
++++  } = options;
+++ 
+++-    diffFilePath = path.resolve(diffFilePath);
++++  const resolvedDiffPath = path.resolve(diffFilePath);
+++ 
+++-    if (!fs.existsSync(diffFilePath)) {
+++-        console.error(`[-] Error: File not found -> ${diffFilePath}`);
+++-        process.exit(1);
+++-    }
++++  if (!fs.existsSync(resolvedDiffPath)) {
++++    throw new Error(`File not found -> ${resolvedDiffPath}`);
++++  }
+++ 
+++-    console.log('[1] Connecting to Chrome CDP...');
+++-    const browser = await chromium.connectOverCDP('http://127.0.0.1:9222');
+++-    
+++-    const contexts = browser.contexts();
+++-    const allPages = contexts.flatMap(c => c.pages());
+++-    let chatPage = allPages.find(p => p.url().includes('chatgpt.com')) || allPages[0];
+++-    
+++-    if (!chatPage) {
+++-        console.error('[-] No browser page found.');
+++-        process.exit(1);
+++-    }
++++  console.log('[1] Connecting to Chrome CDP (ChatGPT)...');
++++  const browser = await chromium.connectOverCDP('http://127.0.0.1:9222');
++++  
++++  const contexts = browser.contexts();
++++  const allPages = contexts.flatMap(c => c.pages());
++++  let chatPage = allPages.find(p => p.url().includes('chatgpt.com'));
++++  
++++  if (!chatPage) {
++++    console.log('[-] No active ChatGPT tab found, creating new page...');
++++    const context = contexts[0] || await browser.newContext();
++++    chatPage = await context.newPage();
++++    await chatPage.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded' });
++++  }
+++ 
+++-    await chatPage.bringToFront();
++++  await chatPage.bringToFront();
+++ 
+++-    if (forceNewChat) {
+++-        console.log('[2] Forcing a completely new chat by navigating to root...');
+++-        await chatPage.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded' });
+++-        await chatPage.waitForTimeout(4000); // Wait for the new chat UI to fully mount
+++-    } else {
+++-        console.log('[2] Reusing current active ChatGPT chat session...');
+++-    }
++++  if (forceNewChat) {
++++    console.log('[2] Forcing a completely new chat by navigating to root...');
++++    await chatPage.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded' });
++++    await chatPage.waitForTimeout(4000);
++++  } else {
++++    console.log('[2] Reusing active ChatGPT chat session...');
++++  }
+++ 
+++-    console.log(`[3] Reading PR Diff prompt from: ${diffFilePath}...`);
+++-    const promptText = fs.readFileSync(diffFilePath, 'utf-8');
++++  console.log(`[3] Reading PR Diff prompt from: ${resolvedDiffPath}...`);
++++  const promptText = fs.readFileSync(resolvedDiffPath, 'utf-8');
+++ 
+++-    const textareaSelector = '#prompt-textarea';
+++-    await chatPage.waitForSelector(textareaSelector, { state: 'visible', timeout: 10000 });
+++-    
+++-    const assistantSelector = '[data-message-author-role="assistant"]';
+++-    const beforeCount = await chatPage.locator(assistantSelector).count();
++++  const textareaSelector = '#prompt-textarea';
++++  await chatPage.waitForSelector(textareaSelector, { state: 'visible', timeout: 15000 });
++++  
++++  const assistantSelector = '[data-message-author-role="assistant"]';
++++  const beforeCount = await chatPage.locator(assistantSelector).count();
+++ 
+++-    console.log('[4] Typing and sending PR Diff into current session...');
+++-    const textarea = chatPage.locator(textareaSelector);
+++-    await textarea.click();
+++-    
+++-    // Using execCommand to bypass React freeze on huge text insertions
+++-    await chatPage.evaluate(([selector, text]) => {
+++-        const el = document.querySelector(selector);
+++-        el.focus();
+++-        document.execCommand('insertText', false, text);
+++-        el.dispatchEvent(new Event('input', { bubbles: true }));
+++-        el.dispatchEvent(new Event('change', { bubbles: true }));
+++-    }, [textareaSelector, promptText]);
+++-    
+++-    await chatPage.waitForTimeout(1500);
++++  console.log('[4] Typing and sending PR Diff into ChatGPT session...');
++++  const textarea = chatPage.locator(textareaSelector);
++++  await textarea.click();
++++  
++++  await chatPage.evaluate(([selector, text]) => {
++++    const el = document.querySelector(selector);
++++    el.focus();
++++    document.execCommand('insertText', false, text);
++++    el.dispatchEvent(new Event('input', { bubbles: true }));
++++    el.dispatchEvent(new Event('change', { bubbles: true }));
++++  }, [textareaSelector, promptText]);
++++  
++++  await chatPage.waitForTimeout(1500);
+++ 
+++-    const sendButton = chatPage.locator('button[data-testid="send-button"]');
+++-    if (await sendButton.count() > 0 && await sendButton.isVisible()) {
+++-        await sendButton.click();
+++-    } else {
+++-        await chatPage.keyboard.press('Enter');
+++-    }
++++  const sendButton = chatPage.locator('button[data-testid="send-button"]');
++++  if (await sendButton.count() > 0 && await sendButton.isVisible()) {
++++    await sendButton.click();
++++  } else {
++++    await chatPage.keyboard.press('Enter');
++++  }
+++ 
+++-    console.log('[5] Waiting for GPT to generate review response...');
+++-    try {
+++-        await chatPage.waitForFunction(
+++-          ({ selector, prev }) => document.querySelectorAll(selector).length > prev,
+++-          { selector: assistantSelector, prev: beforeCount },
+++-          { timeout: 90000 }
+++-        );
+++-    } catch (e) {
+++-        console.log('[-] Timeout waiting for new message element, checking available responses...');
+++-    }
++++  console.log('[5] Waiting for GPT to generate review response...');
++++  try {
++++    await chatPage.waitForFunction(
++++      ({ selector, prev }) => document.querySelectorAll(selector).length > prev,
++++      { selector: assistantSelector, prev: beforeCount },
++++      { timeout: 90000 }
++++    );
++++  } catch (e) {
++++    console.log('[-] Timeout waiting for new message element, checking available responses...');
++++  }
++++
++++  // Dynamic wait for response generation to complete
++++  await chatPage.waitForTimeout(45000);
+++ 
+++-    // Dynamic wait for response generation to complete
+++-    await chatPage.waitForTimeout(45000);
++++  console.log('[6] Reading response...');
++++  const assistantMessages = chatPage.locator(assistantSelector);
++++  const count = await assistantMessages.count();
++++  
++++  const targetIndex = count > beforeCount ? count - 1 : (count > 0 ? count - 1 : -1);
+++ 
+++-    console.log('[6] Reading response...');
+++-    const assistantMessages = chatPage.locator(assistantSelector);
+++-    const count = await assistantMessages.count();
++++  if (targetIndex >= 0) {
++++    const lastMessage = assistantMessages.nth(targetIndex);
++++    const resultText = await lastMessage.innerText();
++++    console.log('\n--- GPT RESPONSE ---\n' + resultText + '\n--------------------\n');
+++     
+++-    const targetIndex = count > beforeCount ? count - 1 : (count > 0 ? count - 1 : -1);
+++-
+++-    if (targetIndex >= 0) {
+++-        const lastMessage = assistantMessages.nth(targetIndex);
+++-        const resultText = await lastMessage.innerText();
+++-        console.log('\n--- GPT RESPONSE ---\n' + resultText + '\n--------------------\n');
+++-        
+++-        const match = resultText.match(/^REVIEW_STATUS:\s*(APPROVED|CHANGES_REQUESTED)\s*$/im);
+++-        if (match) {
+++-            const status = match[1].toUpperCase();
+++-            console.log(`\n📌 Parsed Status: ${status}`);
+++-            try { await browser.close(); } catch(e) {}
+++-            if (status === 'APPROVED') {
+++-                console.log('✅ Code Review Status: APPROVED!');
+++-                process.exit(0);
+++-            } else {
+++-                console.log('❌ Code Review Status: CHANGES_REQUESTED!');
+++-                process.exit(1);
+++-            }
+++-        } else {
+++-            console.log('⚠️ Unexpected Status Format in response text.');
+++-            try { await browser.close(); } catch(e) {}
+++-            process.exit(1);
+++-        }
+++-    } else {
+++-        console.log('[-] Could not find assistant message.');
+++-        try { await browser.close(); } catch(e) {}
+++-        process.exit(1);
++++    if (outputFile) {
++++      const resolvedOutputPath = path.resolve(outputFile);
++++      fs.writeFileSync(resolvedOutputPath, resultText, 'utf-8');
++++      console.log(`[+] Saved GPT Response to: ${resolvedOutputPath}`);
+++     }
+++ 
+++-  } catch (err) {
+++-    console.error('ERROR:', err);
+++-    process.exit(1);
++++    const match = resultText.match(/^REVIEW_STATUS:\s*(APPROVED|CHANGES_REQUESTED)\s*$/im);
++++    const status = match ? match[1].toUpperCase() : 'UNKNOWN';
++++
++++    return {
++++      status,
++++      resultText,
++++      browser
++++    };
++++  } else {
++++    throw new Error('Could not find assistant message in ChatGPT.');
+++   }
+++-})();
++++}
++++
++++module.exports = { runGptReview };
++++
++++// Standalone execution
++++if (require.main === module) {
++++  (async () => {
++++    try {
++++      const args = process.argv.slice(2);
++++      const diffFilePath = args.find(a => !a.startsWith('--')) || 'pr_review_prompt.txt';
++++      const forceNewChat = args.includes('--new-chat');
++++
++++      const result = await runGptReview({ diffFilePath, forceNewChat });
++++      console.log(`\n📌 Parsed GPT Status: ${result.status}`);
++++
++++      if (result.status === 'APPROVED') {
++++        console.log('✅ ChatGPT Review Status: APPROVED!');
++++        process.exit(0);
++++      } else {
++++        console.log('❌ ChatGPT Review Status: CHANGES_REQUESTED (or UNKNOWN)!');
++++        process.exit(1);
++++      }
++++    } catch (err) {
++++      console.error('ERROR in test-gpt-pr:', err);
++++      process.exit(1);
++++    }
++++  })();
++++}
 +diff --git a/scripts/github-pr.sh b/scripts/github-pr.sh
-+index 0b77d8a..5e9d95e 100755
++index 0b77d8a..508b43c 100755
 +--- a/scripts/github-pr.sh
 ++++ b/scripts/github-pr.sh
-+@@ -54,30 +54,32 @@ if [ -z "$PR_NUMBER" ]; then
++@@ -54,30 +54,40 @@ if [ -z "$PR_NUMBER" ]; then
 + fi
 + 
 + if [ -z "$PR_NUMBER" ]; then
@@ -249,6 +1059,14 @@ index 0000000..391b410
 +-echo "[3] Building Production Review Pipeline v2 prompt..."
 ++echo "$ACTUAL_DIFF" > pr_raw_diff.txt
 ++
+++DIFF_BLOCK=""
+++if [ "$PR_NUMBER" = "LOCAL" ]; then
+++    DIFF_BLOCK="
+++DIFF CONTENT (Local Working Branch Diff):
+++$ACTUAL_DIFF
+++"
+++fi
+++
 ++echo "[3] Building concise Production Review Pipeline v2 prompt for ChatGPT..."
 + cat <<EOF > pr_review_prompt.txt
 + You are reviewing a GitHub Pull Request as a senior software engineer using Production Review Pipeline v2.
@@ -259,7 +1077,7 @@ index 0000000..391b410
 + Repository: $OWNER/$REPO_NAME
 + Pull Request: $PR_URL
 + Commit SHA: $COMMIT_SHA
-+@@ -87,53 +89,12 @@ PR Title: $PR_TITLE
++@@ -87,53 +97,12 @@ PR Title: $PR_TITLE
 + Changed Files:
 + $CHANGED_FILES
 + 
@@ -269,6 +1087,8 @@ index 0000000..391b410
 +-RELEVANT CODE CONTEXT:
 ++RELEVANT COMMITS:
 + $RELEVANT_CONTEXT
+++$DIFF_BLOCK
+++Please inspect this PR using your GitHub tools/plugins (or the local diff above) and evaluate the changes.
 + 
 +-==================================================
 +-PHASE 2: ANALYSIS (12-POINT SYSTEMATIC PROTOCOL)
@@ -310,13 +1130,12 @@ index 0000000..391b410
 +-PHASE 5: REPORTING & FINAL VERDICT
 +-==================================================
 +-Do not output REVIEW_STATUS until all 5 phases are complete.
-++Please inspect this PR using your GitHub tools/plugins and evaluate the changes.
-+ 
++-
 ++Output Requirements:
 + At the very beginning output EXACTLY one of:
 + 
 + REVIEW_STATUS: APPROVED
-+@@ -153,7 +114,7 @@ Failure scenario: <realistic failure scenario>
++@@ -153,7 +122,7 @@ Failure scenario: <realistic failure scenario>
 + Recommended fix: <practical code snippet or implementation approach>
 + [/FINDING]
 + 
@@ -356,10 +1175,10 @@ index 0000000..391b410
 +     sleep 4
 +diff --git a/test-claude-pr.js b/test-claude-pr.js
 +new file mode 100644
-+index 0000000..4e4f30c
++index 0000000..7f2f872
 +--- /dev/null
 ++++ b/test-claude-pr.js
-+@@ -0,0 +1,259 @@
++@@ -0,0 +1,261 @@
 ++const { chromium } = require('playwright');
 ++const fs = require('fs');
 ++const path = require('path');
@@ -383,6 +1202,8 @@ index 0000000..391b410
 ++  if (!gptResponseText && gptResponseFilePath && fs.existsSync(resolvedGptPath)) {
 ++    gptResponseText = fs.readFileSync(resolvedGptPath, 'utf-8');
 ++  }
+++
+++  const promptDiffText = fs.readFileSync(resolvedDiffPath, 'utf-8');
 ++
 ++  const rawDiffPath = path.resolve('pr_raw_diff.txt');
 ++  let fullDiffText = '';
@@ -1095,7 +1916,7 @@ index a81a76e..69a14b1 100755
      sleep 4
 diff --git a/test-claude-pr.js b/test-claude-pr.js
 new file mode 100644
-index 0000000..7f2f872
+index 0000000..fca3e53
 --- /dev/null
 +++ b/test-claude-pr.js
 @@ -0,0 +1,261 @@
@@ -1112,14 +1933,14 @@ index 0000000..7f2f872
 +  } = options;
 +
 +  const resolvedDiffPath = path.resolve(diffFilePath);
-+  const resolvedGptPath = path.resolve(gptResponseFilePath);
++  const resolvedGptPath = gptResponseFilePath ? path.resolve(gptResponseFilePath) : null;
 +
 +  if (!fs.existsSync(resolvedDiffPath)) {
 +    throw new Error(`File not found -> ${resolvedDiffPath}`);
 +  }
 +
 +  let gptResponseText = options.gptResponseText || '';
-+  if (!gptResponseText && gptResponseFilePath && fs.existsSync(resolvedGptPath)) {
++  if (!gptResponseText && resolvedGptPath && fs.existsSync(resolvedGptPath)) {
 +    gptResponseText = fs.readFileSync(resolvedGptPath, 'utf-8');
 +  }
 +
