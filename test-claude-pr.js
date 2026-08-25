@@ -22,6 +22,8 @@ async function runClaudeReview(options = {}) {
     gptResponseText = fs.readFileSync(resolvedGptPath, 'utf-8');
   }
 
+  const promptDiffText = fs.readFileSync(resolvedDiffPath, 'utf-8');
+
   const rawDiffPath = path.resolve('pr_raw_diff.txt');
   let fullDiffText = '';
   if (fs.existsSync(rawDiffPath)) {

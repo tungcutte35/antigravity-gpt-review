@@ -76,6 +76,14 @@ fi
 
 echo "$ACTUAL_DIFF" > pr_raw_diff.txt
 
+DIFF_BLOCK=""
+if [ "$PR_NUMBER" = "LOCAL" ]; then
+    DIFF_BLOCK="
+DIFF CONTENT (Local Working Branch Diff):
+$ACTUAL_DIFF
+"
+fi
+
 echo "[3] Building concise Production Review Pipeline v2 prompt for ChatGPT..."
 cat <<EOF > pr_review_prompt.txt
 You are reviewing a GitHub Pull Request as a senior software engineer using Production Review Pipeline v2.
@@ -91,8 +99,8 @@ $CHANGED_FILES
 
 RELEVANT COMMITS:
 $RELEVANT_CONTEXT
-
-Please inspect this PR using your GitHub tools/plugins and evaluate the changes.
+$DIFF_BLOCK
+Please inspect this PR using your GitHub tools/plugins (or the local diff above) and evaluate the changes.
 
 Output Requirements:
 At the very beginning output EXACTLY one of:
