@@ -62,9 +62,11 @@ async function runGptReview(options = {}) {
   if (forceNewChat) {
     console.log('[2] Forcing a completely new chat by navigating to root...');
     await chatPage.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded' });
-    await chatPage.waitForTimeout(4000);
+    await chatPage.bringToFront();
+    await chatPage.waitForTimeout(3000);
   } else {
     console.log('[2] Reusing active ChatGPT chat session...');
+    await chatPage.bringToFront();
   }
 
   console.log(`[3] Reading PR Diff prompt from: ${resolvedDiffPath}...`);
