@@ -75,7 +75,7 @@ process.on('uncaughtException', (err) => { cleanupLock(); throw err; });
       gptResponseText: gptResult ? gptResult.resultText : '',
       gptResponseFilePath: gptResult ? 'gpt_review_response.txt' : null,
       outputFile: 'claude_review_response.txt',
-      forceNewChat: true
+      forceNewChat: false
     });
 
     console.log('==================================================');
