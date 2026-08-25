@@ -42,16 +42,28 @@ process.on('uncaughtException', (err) => { cleanupLock(); throw err; });
     console.log('--------------------------------------------------');
     
     let gptResult = null;
-    try {
-      gptResult = await runGptReview({
-        diffFilePath,
-        forceNewChat: true,
-        outputFile: 'gpt_review_response.txt'
-      });
-      console.log(`[Stage 1 Complete] ChatGPT Status: ${gptResult.status}\n`);
-    } catch (gptErr) {
-      console.error('[-] Stage 1 (ChatGPT) encountered an error:', gptErr.message);
-      console.log('[!] Proceeding to Stage 2 with diff context only...');
+    let attempts = 0;
+    while (attempts < 2) {
+      try {
+        attempts++;
+        console.log(`[+] Attempt ${attempts}: Running ChatGPT Stage 1 Review...`);
+        gptResult = await runGptReview({
+          diffFilePath,
+          forceNewChat: true,
+          outputFile: 'gpt_review_response.txt'
+        });
+        console.log(`[Stage 1 Complete] ChatGPT Status: ${gptResult.status}\n`);
+        break;
+      } catch (gptErr) {
+        console.error(`[-] Stage 1 (ChatGPT) Attempt ${attempts} error:`, gptErr.message);
+        if (attempts < 2) {
+          console.log('[!] Retrying Stage 1 in 3 seconds...');
+          await new Promise(r => setTimeout(r, 3000));
+        } else {
+          console.error('[-] Stage 1 failed after retries. Aborting dual review.');
+          throw new Error(`ChatGPT Stage 1 Review failed: ${gptErr.message}`);
+        }
+      }
     }
 
     console.log('--------------------------------------------------');
