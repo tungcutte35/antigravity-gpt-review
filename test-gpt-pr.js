@@ -79,21 +79,53 @@ async function runGptReview(options = {}) {
   console.log('[4] Typing and sending PR Diff into ChatGPT session...');
   const textarea = chatPage.locator(textareaSelector);
   await textarea.click();
-  
-  await chatPage.evaluate(([selector, text]) => {
-    const el = document.querySelector(selector);
-    el.focus();
-    document.execCommand('insertText', false, text);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-  }, [textareaSelector, promptText]);
-  
-  await chatPage.waitForTimeout(1500);
 
-  const sendButton = chatPage.locator('button[data-testid="send-button"]');
-  if (await sendButton.count() > 0 && await sendButton.isVisible()) {
-    await sendButton.click();
-  } else {
+  try {
+    // Try Playwright native fill first
+    await textarea.fill(promptText);
+  } catch (e) {
+    // Fallback to DOM evaluation & execCommand
+    await chatPage.evaluate(([selector, text]) => {
+      const el = document.querySelector(selector);
+      if (!el) return;
+      el.focus();
+      if ('value' in el) {
+        el.value = text;
+      } else {
+        document.execCommand('insertText', false, text);
+      }
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }, [textareaSelector, promptText]);
+  }
+  
+  await chatPage.waitForTimeout(1000);
+
+  // Trigger key events to ensure React state enables send button
+  await chatPage.keyboard.type(' ');
+  await chatPage.keyboard.press('Backspace');
+  await chatPage.waitForTimeout(1000);
+
+  const sendBtnSelectors = [
+    'button[data-testid="send-button"]',
+    'button[aria-label*="Send"]',
+    'button[aria-label*="Gửi"]',
+    'button[data-testid="fruitjuice-send-button"]'
+  ];
+
+  let sent = false;
+  for (const sSel of sendBtnSelectors) {
+    const btn = chatPage.locator(sSel).last();
+    if (await btn.count() > 0 && await btn.isVisible() && await btn.isEnabled()) {
+      await btn.click();
+      sent = true;
+      console.log(`[+] Clicked send button (${sSel})`);
+      break;
+    }
+  }
+
+  if (!sent) {
+    console.log('[+] Pressing Enter to send prompt...');
     await chatPage.keyboard.press('Enter');
   }
 
