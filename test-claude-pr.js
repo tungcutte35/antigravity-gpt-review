@@ -54,31 +54,24 @@ async function runClaudeReview(options = {}) {
   const promptMetadata = fs.readFileSync(resolvedDiffPath, 'utf-8');
 
   // Build a lightweight 2nd-pass audit prompt for Claude
-  // Only includes: GPT review response + compact PR metadata
-  // NO full diff — Claude reviews GPT's findings, not the entire codebase
+  // Only includes: GPT review response (Claude audits GPT's findings directly)
   let combinedPrompt;
   if (gptResponseText) {
     combinedPrompt = `You are a Lead Software Architect conducting a final 2nd-pass Code Review (Verification & Consensus Gate).
 
-Below is the ChatGPT first-pass review response for this Pull Request. Your job is to verify, filter, and finalize the review.
+Below is the ChatGPT first-pass review response for a Pull Request. Your job is to verify, filter, and finalize the review.
 
 ==================================================
-1. PR METADATA (compact)
-==================================================
-${promptMetadata}
-
-==================================================
-2. CHATGPT FIRST-PASS REVIEW RESPONSE
+CHATGPT FIRST-PASS REVIEW RESPONSE
 ==================================================
 ${gptResponseText}
 
 ==================================================
-3. YOUR SECOND-PASS VERIFICATION & AUDIT INSTRUCTIONS
+YOUR SECOND-PASS VERIFICATION & AUDIT INSTRUCTIONS
 ==================================================
 As the Final Auditor and Senior Lead Architect, perform a 2nd-pass review:
 1. Verify each finding reported by ChatGPT — filter out false positives, hallucinated errors, or subjective nitpicks.
-2. Identify any critical security, financial, logic, or state bugs that ChatGPT missed based on the context.
-3. Output your FINAL VERDICT at the VERY BEGINNING of your response on its own line:
+2. Output your FINAL VERDICT at the VERY BEGINNING of your response on its own line:
 
 REVIEW_STATUS: APPROVED
 
@@ -100,8 +93,8 @@ Recommended fix: <practical code snippet or implementation approach>
 After all findings, provide a concise summary explaining your verdict.
 `;
   } else {
-    // Fallback: no GPT response available, send just metadata
-    combinedPrompt = promptMetadata;
+    // Fallback: no GPT response available
+    combinedPrompt = "No GPT review response available to audit.";
   }
 
   console.log('[1] Connecting to Chrome CDP (Claude.ai)...');
