@@ -76,7 +76,7 @@ fi
 
 echo "$ACTUAL_DIFF" > pr_raw_diff.txt
 
-COMPACT_DIFF=$(echo "$ACTUAL_DIFF" | head -n 40)
+COMPACT_DIFF=$(echo "$ACTUAL_DIFF" | head -n 200)
 
 echo "[3] Building concise Production Review Pipeline v2 prompt for ChatGPT..."
 cat <<EOF > pr_review_prompt.txt

@@ -3,19 +3,34 @@ REVIEW_STATUS: CHANGES_REQUESTED
 [FINDING]
 Severity: HIGH
 File: README.md
-Problem: The documented Dual-Stage flow contradicts the PR's stated purpose. The PR title says Claude should receive only the GPT review response plus compact PR metadata, with no full diff, but the README still explicitly states that "Toàn bộ diff + kết quả của ChatGPT được gửi sang Claude Web".
-Evidence: npm run review:dual → test-dual-pr.js → Claude Web. The README describes the payload as the entire PR diff, while the PR claims the Claude prompt was changed to exclude the full diff.
-Failure scenario: A developer follows the README and assumes the Claude stage still receives the full diff. They may validate the implementation incorrectly, or later modify the script to preserve the documented behavior, reintroducing the large-prompt/token-limit problem this PR is intended to fix.
-Recommended fix: Update the README to describe the actual payload precisely, e.g. "GPT review response + compact PR metadata (and the compact diff summary, if intentionally included)". Remove the statement that the entire diff is sent to Claude. Also verify the README against test-dual-pr.js so the documented contract matches the implementation.
+Problem: The provided PR diff is truncated at the start of the new review-flow documentation, so the actual implementation changes cannot be verified from the supplied diff. In particular, the README claims Claude receives only GPT review + compact metadata, but the critical test-claude-pr.js / orchestration changes are not shown.
+Evidence: The supplied diff only reaches README.md and stops immediately after the ChatGPT section; it does not contain the implementation hunks for test-claude-pr.js, test-dual-pr.js, or the scripts that determine what data is passed to Claude.
+Failure scenario: The implementation could still pass pr_raw_diff.txt or another generated full-diff artifact into the Claude prompt while the README says it does not. This would make the documented data-flow guarantee false and could reintroduce the recursive/oversized prompt problem this series is intended to fix.
+Recommended fix: Review the complete PR diff, especially the Claude invocation path, and verify that its input is constructed only from the GPT response plus explicitly bounded metadata. For example:
+
+JavaScript
+const claudePrompt = [
+  'Review the PR based on the GPT review below.',
+  `PR metadata:\n${compactMetadata}`,
+  `GPT review:\n${gptReview}`,
+].join('\n\n');
+
+// Do not read or append pr_raw_diff.txt here.
+
 [/FINDING]
 
 [FINDING]
 Severity: MEDIUM
-File: README.md
-Problem: The documentation does not clearly define the new Claude input contract, despite that contract being the core behavioral change of this PR.
-Evidence: The README only describes the Dual-Stage flow at a high level and says Claude receives "Toàn bộ diff + kết quả của ChatGPT", providing no explicit boundary around what PR metadata or review content is actually included.
-Failure scenario: Future changes to test-dual-pr.js can accidentally append pr_raw_diff.txt or another full-diff artifact because there is no documented invariant saying the Claude prompt must never contain the full raw diff.
-Recommended fix: Document an explicit invariant such as: "Claude prompt MUST contain only GPT review response + compact PR metadata; MUST NOT include pr_raw_diff.txt or the full PR diff." Add a regression test that asserts the generated Claude prompt does not contain the raw diff and does contain the GPT response.
+File: .gitignore
+Problem: The .gitignore change removes the existing *.log ignore rule while adding several generated review artifacts. Unless *.log is intentionally meant to become trackable, this is an unrelated regression in repository hygiene.
+Evidence: The old .gitignore contained *.log; the new version shown in the diff does not.
+Failure scenario: A local review/test run creates a .log file, Git reports it as untracked, and a developer can accidentally commit generated logs containing browser/debug output or other runtime data.
+Recommended fix: Preserve the existing rule:
+
+gitignore
+*.log
+
+and keep the new generated-artifact rules alongside it.
 [/FINDING]
 
-Review summary: The supplied compact diff shows a documentation-level inconsistency with the PR's primary objective. Because the actual changed implementation files (test-dual-pr.js, scripts/github-pr.sh, etc.) are not included in the supplied diff, I cannot establish that the runtime implementation itself is correct. The README contradiction is sufficient to request changes; the documentation and implementation contract should be aligned before approval.
+Review summary: The supplied diff is incomplete and the GitHub connector cannot resolve the specified commit, so the central Claude data-flow claim cannot be independently validated. The .gitignore regression is directly observable and should be fixed; the complete implementation diff should also be provided/accessible before approving.
