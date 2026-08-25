@@ -5,9 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "review:gpt": "node test-gpt-pr.js",
-    "review:claude": "node test-claude-pr.js",
-    "review:dual": "node test-dual-pr.js"
+    "review": "node test-gpt-pr.js"
   },
   "keywords": [],
   "author": "tungcutte35",
