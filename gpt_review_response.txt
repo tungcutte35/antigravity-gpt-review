@@ -2,15 +2,15 @@ REVIEW_STATUS: CHANGES_REQUESTED
 
 [FINDING]
 Severity: HIGH
-File: N/A
-Problem: The requested commit 24c42276ac64c6c61b713f9d8dde76a3c2ae9684 and branch feature/claude-review-flow are not accessible in the connected GitHub repository, so the claimed PR changes cannot be verified.
-Evidence: GitHub lookup for feature/claude-review-flow returns Branch not found; lookup for commit 24c42276ac64c6c61b713f9d8dde76a3c2ae9684 returns No commit found for SHA; the repository's accessible PR #1 is an unrelated, already-merged PR.
-Failure scenario: A review based on the listed changed files would require guessing the contents of the target commit. That can miss regressions in scripts/github-pr.sh, the Claude/GPT sequencing changes, or the prompt-generation logic and could incorrectly approve broken code.
-Recommended fix: Push the target branch/commit to the GitHub repository or provide an accessible PR number/commit SHA. Once available, the review should inspect the complete diff plus the relevant parent/current implementations before issuing an approval.
+File: test-gpt-pr.js
+Problem: The requested commit a078be2ddde204c5d794c11982169414add91aaf and branch feature/claude-review-flow are not accessible through the connected GitHub repository, so the claimed navigation/tab-front behavior cannot be verified against the actual commit. The available GitHub data resolves only to PR #1, whose patch does not contain the requested commit or the listed changed files.
+Evidence: GitHub commit lookup for a078be2ddde204c5d794c11982169414add91aaf returns No commit found for SHA; fetching feature/claude-review-flow likewise fails to resolve the ref. The only accessible PR data is tungcutte35/antigravity-gpt-review#1, whose available patch contains only README.md, package-lock.json, and package.json.
+Failure scenario: A review or approval based on the supplied file list would be evaluating a different repository state than commit a078be2.... A regression in the new tab-navigation logic—such as bringing the wrong ChatGPT tab to the front, racing navigation with message submission, or activating a stale tab—could therefore be merged without being detected.
+Recommended fix: Push/expose the commit and branch to the GitHub repository accessible by the review connector, or provide the actual PR number. Then review the exact head SHA, complete diff, and surrounding implementation before approving. Do not treat PR #1's unrelated patch as evidence for a078be2....
 [/FINDING]
 
 Review summary
 
-I cannot safely approve this revision because the exact revision specified for review is unavailable through the GitHub integration. The repository currently exposes neither the requested branch nor commit, so there is insufficient evidence to evaluate the nine changed files or the interaction between commits 24c4227, 3a27f0e, and fbfde34.
+I cannot safely approve this PR because the exact commit under review is not present in the GitHub repository accessible to the connected GitHub tool. The available repository state is a different PR/commit, so evaluating the requested seven changed files would require guessing.
 
-No code-level finding should be fabricated from the inaccessible revision.
+The review should be rerun once a078be2ddde204c5d794c11982169414add91aaf is accessible (or the correct PR number is supplied).

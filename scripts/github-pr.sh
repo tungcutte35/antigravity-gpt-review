@@ -76,6 +76,8 @@ fi
 
 echo "$ACTUAL_DIFF" > pr_raw_diff.txt
 
+COMPACT_DIFF=$(echo "$ACTUAL_DIFF" | head -n 40)
+
 echo "[3] Building concise Production Review Pipeline v2 prompt for ChatGPT..."
 cat <<EOF > pr_review_prompt.txt
 You are reviewing a GitHub Pull Request as a senior software engineer using Production Review Pipeline v2.
@@ -92,7 +94,10 @@ $CHANGED_FILES
 RELEVANT COMMITS:
 $RELEVANT_CONTEXT
 
-Please inspect this PR using your GitHub tools/plugins and evaluate the changes.
+COMPACT GIT DIFF SUMMARY:
+$COMPACT_DIFF
+
+Please inspect the PR details & diff above and evaluate the changes.
 
 Output Requirements:
 At the very beginning output EXACTLY one of:
