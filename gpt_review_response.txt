@@ -2,15 +2,20 @@ REVIEW_STATUS: CHANGES_REQUESTED
 
 [FINDING]
 Severity: HIGH
-File: test-gpt-pr.js
-Problem: The requested commit a078be2ddde204c5d794c11982169414add91aaf and branch feature/claude-review-flow are not accessible through the connected GitHub repository, so the claimed navigation/tab-front behavior cannot be verified against the actual commit. The available GitHub data resolves only to PR #1, whose patch does not contain the requested commit or the listed changed files.
-Evidence: GitHub commit lookup for a078be2ddde204c5d794c11982169414add91aaf returns No commit found for SHA; fetching feature/claude-review-flow likewise fails to resolve the ref. The only accessible PR data is tungcutte35/antigravity-gpt-review#1, whose available patch contains only README.md, package-lock.json, and package.json.
-Failure scenario: A review or approval based on the supplied file list would be evaluating a different repository state than commit a078be2.... A regression in the new tab-navigation logic—such as bringing the wrong ChatGPT tab to the front, racing navigation with message submission, or activating a stale tab—could therefore be merged without being detected.
-Recommended fix: Push/expose the commit and branch to the GitHub repository accessible by the review connector, or provide the actual PR number. Then review the exact head SHA, complete diff, and surrounding implementation before approving. Do not treat PR #1's unrelated patch as evidence for a078be2....
+File: pr_review_prompt.txt
+Problem: The requested change claims to add a compact 40-line diff summary for local-branch reviews, but pr_review_prompt.txt is not included in the changed-files list or supplied diff. Therefore the core behavior described by the PR title cannot be verified from the provided patch, and the immediately preceding commit explicitly removed diff text from this prompt.
+Evidence: 24c4227 removed diff text from pr_review_prompt.txt; the current commit c4d0701 is described as restoring a compact diff summary, but the supplied changed files contain no pr_review_prompt.txt change.
+Failure scenario: A local-branch review runs after this commit, but pr_review_prompt.txt still contains no diff summary. ChatGPT receives only the prompt/instructions and lacks the intended 40-line change context, so the review can miss defects that depend on the actual local diff.
+Recommended fix: Include the actual pr_review_prompt.txt modification in the commit and verify the generated prompt contains exactly the intended compact diff summary. Add an automated assertion in the local-review flow that the prompt contains the summary and that it is capped at 40 diff lines, e.g. generate diffSummary = diff.split('\\n').slice(0, 40).join('\\n') and assert the resulting prompt contains that exact summary before sending it to ChatGPT.
 [/FINDING]
 
-Review summary
+[FINDING]
+Severity: MEDIUM
+File: test-dual-pr.js
+Problem: The README states that Dual Review sends the entire diff + ChatGPT result to Claude, while the PR's stated optimization is specifically to keep the ChatGPT prompt compact. Without inspecting the implementation, there is a risk that the local-branch flow still constructs a large second-stage prompt and defeats the intended prompt-size reduction.
+Evidence: README describes the sequence as “Toàn bộ diff + kết quả của ChatGPT” being sent to Claude, while the relevant commit history shows repeated changes specifically intended to control diff size in pr_review_prompt.txt.
+Failure scenario: A large PR produces a very large Claude prompt despite the compact ChatGPT summary. The browser automation may exceed context/input limits, become slow, or fail to submit the review reliably.
+Recommended fix: Explicitly define separate payload budgets for each stage. Keep the 40-line summary in the ChatGPT prompt, and only send the full diff to Claude when it is within a known safe size; otherwise truncate/summarize it or chunk it. Add tests covering a large diff and asserting the generated prompt size.
+[/FINDING]
 
-I cannot safely approve this PR because the exact commit under review is not present in the GitHub repository accessible to the connected GitHub tool. The available repository state is a different PR/commit, so evaluating the requested seven changed files would require guessing.
-
-The review should be rerun once a078be2ddde204c5d794c11982169414add91aaf is accessible (or the correct PR number is supplied).
+The GitHub connector could not resolve the supplied commit/branch, so I could not independently inspect the actual c4d0701 tree. The review therefore relies on the supplied changed-file list, commit history, and diff summary. The primary blocker is that the PR's advertised pr_review_prompt.txt change is absent from the supplied patch, making the core optimization unverifiable.
