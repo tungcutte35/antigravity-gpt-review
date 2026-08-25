@@ -170,50 +170,63 @@ After all findings, provide a concise summary explaining your verdict.
     await claudePage.keyboard.press('Enter');
   }
 
-  console.log('[6] Waiting for Claude response streaming to complete...');
+  console.log('[6] Waiting for Claude response streaming to complete & text to stabilize...');
   
-  // Wait up to 120s for Claude streaming to start and finish
   await claudePage.waitForTimeout(5000);
 
-  // Monitor stop button or streaming attribute
-  let checkCount = 0;
-  while (checkCount < 30) {
-    const stopBtn = claudePage.locator('button[aria-label*="Stop"], button:has-text("Stop response")');
-    const isStreaming = await stopBtn.count() > 0 && await stopBtn.first().isVisible();
-    if (!isStreaming) {
-      break;
-    }
-    await claudePage.waitForTimeout(3000);
-    checkCount++;
-  }
+  // Helper to extract current assistant response
+  const extractClaudeText = async () => {
+    const responseSelectors = [
+      '.font-claude-message',
+      'div[data-is-streaming]',
+      'div.grid',
+      '.prose'
+    ];
 
-  await claudePage.waitForTimeout(5000);
-
-  console.log('[7] Reading Claude response...');
-  
-  // Extract response text from Claude
-  const responseSelectors = [
-    '.font-claude-message',
-    'div[data-is-streaming]',
-    'div.grid',
-    '.prose'
-  ];
-
-  let resultText = '';
-  for (const rSel of responseSelectors) {
-    const msgs = claudePage.locator(rSel);
-    const count = await msgs.count();
-    if (count > 0) {
-      resultText = await msgs.nth(count - 1).innerText();
-      if (resultText && resultText.trim().length > 20) {
-        break;
+    for (const rSel of responseSelectors) {
+      const msgs = claudePage.locator(rSel);
+      const count = await msgs.count();
+      if (count > 0) {
+        const text = await msgs.nth(count - 1).innerText();
+        if (text && text.trim().length > 20) {
+          return text;
+        }
       }
     }
+    return await claudePage.evaluate(() => document.body.innerText);
+  };
+
+  // Poll until Stop button is gone and text has REVIEW_STATUS or text length stabilizes
+  let lastText = '';
+  let stableCount = 0;
+  let pollAttempts = 0;
+  const maxPolls = 30;
+
+  while (pollAttempts < maxPolls) {
+    const stopBtn = claudePage.locator('button[aria-label*="Stop"], button:has-text("Stop response")');
+    const isStreaming = await stopBtn.count() > 0 && await stopBtn.first().isVisible();
+    
+    const currentText = await extractClaudeText();
+    const hasStatus = /^REVIEW_STATUS:\s*(APPROVED|CHANGES_REQUESTED)/im.test(currentText);
+
+    if (currentText && currentText === lastText && currentText.length > 50) {
+      stableCount++;
+    } else {
+      stableCount = 0;
+    }
+    lastText = currentText;
+
+    if (!isStreaming && (hasStatus || stableCount >= 2)) {
+      console.log(`[+] Response complete and verified (Attempt ${pollAttempts + 1}, HasStatus: ${hasStatus}).`);
+      break;
+    }
+
+    await claudePage.waitForTimeout(3000);
+    pollAttempts++;
   }
 
-  if (!resultText) {
-    resultText = await claudePage.evaluate(() => document.body.innerText);
-  }
+  console.log('[7] Reading final Claude response...');
+  const resultText = await extractClaudeText();
 
   console.log('\n--- CLAUDE RESPONSE ---\n' + resultText + '\n-----------------------\n');
 
