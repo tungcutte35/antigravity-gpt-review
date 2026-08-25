@@ -54,10 +54,15 @@ if [ -z "$PR_NUMBER" ]; then
 fi
 
 if [ -z "$PR_NUMBER" ]; then
-    echo "    [!] Notice: Could not create PR via GitHub API (branch may not be pushed to remote yet)."
-    echo "    [!] Proceeding with local git diff prompt generation..."
-    PR_NUMBER="LOCAL"
-    PR_URL="Local Branch: $BRANCH (Commit: $COMMIT_SHA)"
+    echo "    [!] WARNING: Could not create PR via GitHub API (branch may not be pushed to remote yet)."
+    if [ "${ALLOW_LOCAL_REVIEW:-1}" = "1" ]; then
+        echo "    [!] ALLOW_LOCAL_REVIEW=1 — Falling back to LOCAL mode..."
+        PR_NUMBER="LOCAL"
+        PR_URL="Local Branch: $BRANCH (Commit: $COMMIT_SHA)"
+    else
+        echo "    [!] Set ALLOW_LOCAL_REVIEW=1 to use local diff mode. Exiting."
+        exit 1
+    fi
 else
     echo "    PR #${PR_NUMBER}: ${PR_URL}"
 fi
@@ -76,26 +81,40 @@ fi
 
 echo "$ACTUAL_DIFF" > pr_raw_diff.txt
 
-COMPACT_DIFF=$(echo "$ACTUAL_DIFF" | head -n 200)
+TOTAL_DIFF_LINES=$(echo "$ACTUAL_DIFF" | wc -l)
+MAX_DIFF_LINES=200
+COMPACT_DIFF=$(echo "$ACTUAL_DIFF" | head -n "$MAX_DIFF_LINES")
+TRUNCATION_NOTE=""
+if [ "$TOTAL_DIFF_LINES" -gt "$MAX_DIFF_LINES" ]; then
+    REMAINING=$((TOTAL_DIFF_LINES - MAX_DIFF_LINES))
+    TRUNCATION_NOTE="[TRUNCATED: $REMAINING more lines not shown. Full diff saved in pr_raw_diff.txt]"
+fi
 
 echo "[3] Building concise Production Review Pipeline v2 prompt for ChatGPT..."
-cat <<EOF > pr_review_prompt.txt
+# SECURITY: Use quoted heredoc ('EOF') to prevent shell expansion of diff content
+# This prevents command injection via malicious $(...) or backtick sequences in PR diffs
+cat <<'STATIC_EOF' > pr_review_prompt.txt
 You are reviewing a GitHub Pull Request as a senior software engineer using Production Review Pipeline v2.
 
-Repository: $OWNER/$REPO_NAME
-Pull Request: $PR_URL
-Commit SHA: $COMMIT_SHA
-Branch: $BRANCH
-PR Title: $PR_TITLE
+STATIC_EOF
 
-Changed Files:
-$CHANGED_FILES
+# Append safe metadata fields via printf
+printf 'Repository: %s\n' "$OWNER/$REPO_NAME" >> pr_review_prompt.txt
+printf 'Pull Request: %s\n' "$PR_URL" >> pr_review_prompt.txt
+printf 'Commit SHA: %s\n' "$COMMIT_SHA" >> pr_review_prompt.txt
+printf 'Branch: %s\n' "$BRANCH" >> pr_review_prompt.txt
+printf 'PR Title: %s\n\n' "$PR_TITLE" >> pr_review_prompt.txt
 
-RELEVANT COMMITS:
-$RELEVANT_CONTEXT
+printf 'Changed Files:\n%s\n\n' "$CHANGED_FILES" >> pr_review_prompt.txt
+printf 'RELEVANT COMMITS:\n%s\n\n' "$RELEVANT_CONTEXT" >> pr_review_prompt.txt
 
-COMPACT GIT DIFF SUMMARY:
-$COMPACT_DIFF
+printf 'COMPACT GIT DIFF SUMMARY:\n' >> pr_review_prompt.txt
+printf '%s\n' "$COMPACT_DIFF" >> pr_review_prompt.txt
+if [ -n "$TRUNCATION_NOTE" ]; then
+    printf '%s\n' "$TRUNCATION_NOTE" >> pr_review_prompt.txt
+fi
+
+cat <<'STATIC_EOF' >> pr_review_prompt.txt
 
 Please inspect the PR details & diff above and evaluate the changes.
 
@@ -120,6 +139,7 @@ Recommended fix: <practical code snippet or implementation approach>
 [/FINDING]
 
 After all findings, provide a concise review summary.
-EOF
+STATIC_EOF
 
 echo -e "\n=== DONE - Concise prompt written to: pr_review_prompt.txt & Raw diff to: pr_raw_diff.txt ==="
+
