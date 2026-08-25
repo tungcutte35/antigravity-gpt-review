@@ -147,21 +147,13 @@ After all findings, provide a concise summary explaining your verdict.
   console.log(`[4] Typing prompt into Claude (${inputSelector})...`);
   const inputEl = claudePage.locator(inputSelector).first();
   await inputEl.click();
+  await claudePage.waitForTimeout(500);
 
-  await claudePage.evaluate(([sel, text]) => {
-    const el = document.querySelector(sel);
-    if (!el) return;
-    el.focus();
-    if (el.isContentEditable) {
-      document.execCommand('insertText', false, text);
-    } else {
-      el.value = text;
-    }
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-  }, [inputSelector, combinedPrompt]);
-
-  await claudePage.waitForTimeout(1500);
+  // Use Playwright's native insertText which correctly fires clipboard and input events for React
+  await claudePage.keyboard.insertText(combinedPrompt);
+  await claudePage.waitForTimeout(500);
+  await claudePage.keyboard.press('Space');
+  await claudePage.waitForTimeout(1000);
 
   // Find send button
   console.log('[5] Clicking Send button on Claude...');
