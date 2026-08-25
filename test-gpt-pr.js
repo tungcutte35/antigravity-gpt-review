@@ -131,19 +131,27 @@ async function runGptReview(options = {}) {
     await chatPage.keyboard.press('Enter');
   }
 
-  console.log('[5] Waiting for GPT to generate review response...');
-  try {
-    await chatPage.waitForFunction(
-      ({ selector, prev }) => document.querySelectorAll(selector).length > prev,
-      { selector: assistantSelector, prev: beforeCount },
-      { timeout: 90000 }
-    );
-  } catch (e) {
-    console.log('[-] Timeout waiting for new message element, checking available responses...');
+  console.log('[5] Waiting for GPT to generate review response (smart polling)...');
+  let lastText = '';
+  let stableCount = 0;
+  for (let i = 0; i < 60; i++) {
+    await chatPage.waitForTimeout(2000); // 2s polling interval, max 120s
+    const currentCount = await chatPage.locator(assistantSelector).count();
+    if (currentCount > beforeCount) {
+      const msg = chatPage.locator(assistantSelector).nth(currentCount - 1);
+      const currentText = await msg.innerText();
+      if (currentText && currentText === lastText) {
+        stableCount++;
+        if (stableCount >= 2) {
+          console.log('[-] Response text stabilized. Generation complete.');
+          break;
+        }
+      } else {
+        stableCount = 0;
+        lastText = currentText;
+      }
+    }
   }
-
-  // Dynamic wait for response generation to complete
-  await chatPage.waitForTimeout(15000);
 
   console.log('[6] Reading response...');
   const assistantMessages = chatPage.locator(assistantSelector);
