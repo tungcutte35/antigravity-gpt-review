@@ -3,6 +3,23 @@ const fs = require('fs');
 const { runGptReview } = require('./test-gpt-pr');
 const { runClaudeReview } = require('./test-claude-pr');
 
+const lockFile = path.resolve(__dirname, 'test-dual-pr.lock');
+if (fs.existsSync(lockFile)) {
+  try {
+    const pid = parseInt(fs.readFileSync(lockFile, 'utf-8').trim(), 10);
+    process.kill(pid, 0);
+    console.error(`[-] Error: Another review process (PID ${pid}) is already running. Exiting to prevent browser freeze...`);
+    process.exit(1);
+  } catch (e) {
+    try { fs.unlinkSync(lockFile); } catch(err){}
+  }
+}
+fs.writeFileSync(lockFile, String(process.pid));
+const cleanupLock = () => { try { if (fs.existsSync(lockFile)) fs.unlinkSync(lockFile); } catch(e){} };
+process.on('exit', cleanupLock);
+process.on('SIGINT', cleanupLock);
+process.on('uncaughtException', (err) => { cleanupLock(); throw err; });
+
 (async () => {
   try {
     const args = process.argv.slice(2);
