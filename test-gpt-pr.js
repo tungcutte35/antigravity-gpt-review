@@ -160,15 +160,21 @@ async function runGptReview(options = {}) {
       
       if (currentText === lastText && currentText.trim().length > 0) {
         stableCount++;
+        console.log(`[+] Text stable for ${stableCount * 2}s (length: ${currentText.length})`);
         if (stableCount >= 3) { // 6 seconds of no text change
           console.log('[+] Assistant response stabilized, generation complete.');
           generationComplete = true;
           break;
         }
       } else {
+        if (currentText !== lastText) {
+          console.log(`[-] Text changing... (length: ${currentText.length})`);
+        }
         lastText = currentText;
         stableCount = 0;
       }
+    } else {
+      console.log(`[-] Waiting for new message... (current: ${currentCount}, before: ${beforeCount})`);
     }
   }
 
