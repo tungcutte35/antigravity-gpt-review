@@ -76,5 +76,36 @@ printf 'Commit SHA: %s\n' "$COMMIT_SHA" >> pr_review_prompt.txt
 printf 'Branch: %s\n' "$BRANCH" >> pr_review_prompt.txt
 printf 'PR Title: %s\n' "$PR_TITLE" >> pr_review_prompt.txt
 
+# If this is a LOCAL fallback review, GPT has no GitHub PR to fetch from, so we MUST supply the diff.
+if [ "$PR_NUMBER" = "LOCAL" ]; then
+    echo "    [!] LOCAL fallback detected. Appending compact diff directly to prompt..."
+    
+    BASE_COMMIT=$(git merge-base "$BASE_BRANCH" "$BRANCH" 2>/dev/null || echo "HEAD~1")
+    if [ "$BASE_COMMIT" = "HEAD~1" ]; then
+        ACTUAL_DIFF=$(git diff HEAD~1 2>/dev/null || echo "No diff available")
+        CHANGED_FILES=$(git diff --name-only HEAD~1 2>/dev/null || echo "See diff below")
+    else
+        ACTUAL_DIFF=$(git diff "$BASE_COMMIT...$BRANCH" 2>/dev/null || echo "No diff available")
+        CHANGED_FILES=$(git diff --name-only "$BASE_COMMIT...$BRANCH" 2>/dev/null || echo "See diff below")
+    fi
+    
+    echo "$ACTUAL_DIFF" > pr_raw_diff.txt
+    TOTAL_DIFF_LINES=$(echo "$ACTUAL_DIFF" | wc -l)
+    MAX_DIFF_LINES=300
+    COMPACT_DIFF=$(echo "$ACTUAL_DIFF" | head -n "$MAX_DIFF_LINES")
+    TRUNCATION_NOTE=""
+    if [ "$TOTAL_DIFF_LINES" -gt "$MAX_DIFF_LINES" ]; then
+        REMAINING=$((TOTAL_DIFF_LINES - MAX_DIFF_LINES))
+        TRUNCATION_NOTE="[TRUNCATED: $REMAINING more lines not shown. Full diff saved in pr_raw_diff.txt]"
+    fi
+
+    printf '\nChanged Files:\n%s\n' "$CHANGED_FILES" >> pr_review_prompt.txt
+    printf '\nCOMPACT GIT DIFF SUMMARY:\n%s\n' "$COMPACT_DIFF" >> pr_review_prompt.txt
+    if [ -n "$TRUNCATION_NOTE" ]; then
+        printf '%s\n' "$TRUNCATION_NOTE" >> pr_review_prompt.txt
+    fi
+    printf '\n[END OF DIFF]\nPlease evaluate the local changes above.\n' >> pr_review_prompt.txt
+fi
+
 echo -e "\n=== DONE - Prompt written to: pr_review_prompt.txt ($(wc -l < pr_review_prompt.txt) lines) ==="
 
