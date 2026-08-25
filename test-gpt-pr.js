@@ -144,27 +144,35 @@ async function runGptReview(options = {}) {
     await chatPage.keyboard.press('Enter');
   }
 
-  console.log('[5] Waiting for GPT to finish generating review response (checking send button state)...');
+  console.log('[5] Waiting for GPT to finish generating review response (checking text stability)...');
   let generationComplete = false;
+  let lastText = '';
+  let stableCount = 0;
+
   for (let i = 0; i < 90; i++) {
-    await chatPage.waitForTimeout(2000); // wait first to allow UI to transition to 'generating' state
-    let btnEnabled = false;
-    for (const sSel of sendBtnSelectors) {
-      const btn = chatPage.locator(sSel).last();
-      if (await btn.count() > 0 && await btn.isVisible() && await btn.isEnabled()) {
-        btnEnabled = true;
-        break;
+    await chatPage.waitForTimeout(2000);
+    const currentCount = await assistantMessages.count();
+    
+    if (currentCount > beforeCount) {
+      const currentMessage = assistantMessages.nth(currentCount - 1);
+      const currentText = await currentMessage.innerText();
+      
+      if (currentText === lastText && currentText.trim().length > 0) {
+        stableCount++;
+        if (stableCount >= 3) { // 6 seconds of no text change
+          console.log('[+] Assistant response stabilized, generation complete.');
+          generationComplete = true;
+          break;
+        }
+      } else {
+        lastText = currentText;
+        stableCount = 0;
       }
-    }
-    if (btnEnabled) {
-      console.log('[+] Send button is enabled, generation complete.');
-      generationComplete = true;
-      break;
     }
   }
 
   if (!generationComplete) {
-    throw new Error('GPT generation did not complete within the 180-second timeout.');
+    throw new Error('GPT generation did not complete within the 180-second timeout (text did not stabilize).');
   }
 
   console.log('[6] Reading response...');
