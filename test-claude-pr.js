@@ -1,6 +1,29 @@
-const { chromium } = require('playwright');
-const fs = require('fs');
-const path = require('path');
+const { execSync } = require('child_process');
+const http = require('http');
+
+async function ensureCdpRunning() {
+  return new Promise((resolve) => {
+    const req = http.get('http://127.0.0.1:9222/json/version', (res) => {
+      resolve(true);
+    });
+    req.on('error', () => {
+      console.log('[!] CDP port 9222 not active. Auto-launching Chrome CDP...');
+      try {
+        const isWin = process.platform === 'win32';
+        const scriptPath = path.resolve(__dirname, 'scripts', isWin ? 'test-cdp.ps1' : 'test-cdp.sh');
+        if (isWin) {
+          execSync(`powershell -ExecutionPolicy Bypass -File "${scriptPath}"`, { stdio: 'inherit' });
+        } else {
+          execSync(`bash "${scriptPath}"`, { stdio: 'inherit' });
+        }
+      } catch (e) {
+        console.error('[-] Failed to auto-launch Chrome CDP script:', e.message);
+      }
+      resolve(false);
+    });
+    req.end();
+  });
+}
 
 async function runClaudeReview(options = {}) {
   const {
@@ -16,6 +39,8 @@ async function runClaudeReview(options = {}) {
   if (!fs.existsSync(resolvedDiffPath)) {
     throw new Error(`File not found -> ${resolvedDiffPath}`);
   }
+
+  await ensureCdpRunning();
 
   let gptResponseText = options.gptResponseText || '';
   if (!gptResponseText && resolvedGptPath && fs.existsSync(resolvedGptPath)) {
