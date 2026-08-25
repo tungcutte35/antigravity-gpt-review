@@ -187,7 +187,7 @@ if (require.main === module) {
     try {
       const args = process.argv.slice(2);
       const diffFilePath = args.find(a => !a.startsWith('--')) || 'pr_review_prompt.txt';
-      const forceNewChat = args.includes('--new-chat');
+      const forceNewChat = !args.includes('--reuse-chat');
 
       const result = await runGptReview({ diffFilePath, forceNewChat });
       console.log(`\n📌 Parsed GPT Status: ${result.status}`);
