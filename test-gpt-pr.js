@@ -145,25 +145,22 @@ async function runGptReview(options = {}) {
   }
 
   console.log('[5] Waiting for GPT to finish generating review response (checking send button state)...');
-  try {
-    // Check every 2s if the send button is enabled again (meaning generation stopped)
-    for (let i = 0; i < 60; i++) {
-      await chatPage.waitForTimeout(2000);
-      let btnEnabled = false;
-      for (const sSel of sendBtnSelectors) {
-        const btn = chatPage.locator(sSel).last();
-        if (await btn.count() > 0 && await btn.isVisible() && await btn.isEnabled()) {
-          btnEnabled = true;
-          break;
-        }
-      }
-      if (btnEnabled) {
-        console.log('[-] Generation complete signal detected (Send button re-enabled).');
-        break;
-      }
+  let generationComplete = false;
+  for (let i = 0; i < 60; i++) {
+    const btnEnabled = await chatPage.evaluate(() => {
+      const sendBtn = document.querySelector('button[data-testid="send-button"]');
+      return sendBtn && !sendBtn.disabled;
+    });
+    if (btnEnabled) {
+      console.log('[+] Send button is enabled, generation complete.');
+      generationComplete = true;
+      break;
     }
-  } catch (e) {
-    console.log('[-] Timeout waiting for send button, proceeding...');
+    await chatPage.waitForTimeout(2000);
+  }
+
+  if (!generationComplete) {
+    throw new Error('GPT generation did not complete within the 120-second timeout.');
   }
 
   console.log('[6] Reading response...');
