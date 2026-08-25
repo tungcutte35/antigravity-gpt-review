@@ -143,7 +143,7 @@ async function runGptReview(options = {}) {
   }
 
   // Dynamic wait for response generation to complete
-  await chatPage.waitForTimeout(45000);
+  await chatPage.waitForTimeout(15000);
 
   console.log('[6] Reading response...');
   const assistantMessages = chatPage.locator(assistantSelector);

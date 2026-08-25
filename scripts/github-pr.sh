@@ -96,7 +96,7 @@ if [ "$PR_NUMBER" = "LOCAL" ]; then
     TRUNCATION_NOTE=""
     if [ "$TOTAL_DIFF_LINES" -gt "$MAX_DIFF_LINES" ]; then
         REMAINING=$((TOTAL_DIFF_LINES - MAX_DIFF_LINES))
-        TRUNCATION_NOTE="[TRUNCATED: $REMAINING more lines not shown. Full diff saved in pr_raw_diff.txt]"
+        TRUNCATION_NOTE="[TRUNCATED: $REMAINING more lines not shown. Full diff saved in pr_raw_diff.txt]\n\nIMPORTANT: This diff is truncated.\nDo NOT return APPROVED unless the available diff is sufficient\nto confidently review the change."
     fi
 
     printf '\nChanged Files:\n%s\n' "$CHANGED_FILES" >> pr_review_prompt.txt
