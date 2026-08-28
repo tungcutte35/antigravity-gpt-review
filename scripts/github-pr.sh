@@ -54,44 +54,36 @@ if [ -z "$PR_NUMBER" ]; then
 fi
 
 if [ -z "$PR_NUMBER" ]; then
-    echo "Error creating or fetching PR."
-    exit 1
+    echo "    [!] WARNING: Could not create PR via GitHub API (branch may not be pushed to remote yet)."
+    if [ "${ALLOW_LOCAL_REVIEW:-1}" = "1" ]; then
+        echo "    [!] ALLOW_LOCAL_REVIEW=1 — Falling back to LOCAL mode..."
+        PR_NUMBER="LOCAL"
+        PR_URL="Local Branch: $BRANCH (Commit: $COMMIT_SHA)"
+    else
+        echo "    [!] Set ALLOW_LOCAL_REVIEW=1 to use local diff mode. Exiting."
+        exit 1
+    fi
+else
+    echo "    PR #${PR_NUMBER}: ${PR_URL}"
 fi
-
-echo "    PR #${PR_NUMBER}: ${PR_URL}"
 echo "    Commit SHA: ${COMMIT_SHA}"
 
-echo "[2] Fetching PR metadata..."
-DIFF_TEXT="(Please use your GitHub plugin/tool to read the diff for PR: $PR_URL or review the recent changes. The PR is on branch $BRANCH at commit $COMMIT_SHA)"
-
-CHANGED_FILES=$(git diff --name-only origin/$BASE_BRANCH...$BRANCH 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null || echo "See diff below")
-
-RELEVANT_CONTEXT=""
-if [ -n "$CHANGED_FILES" ]; then
-    RELEVANT_CONTEXT=$(git log -n 3 --oneline 2>/dev/null || echo "Recent commits fetched")
-fi
-
-echo "[3] Building Production Review Pipeline v2 prompt..."
-cat <<EOF > pr_review_prompt.txt
+cat << 'EOF' > pr_review_prompt.txt
 You are reviewing a GitHub Pull Request as a senior software engineer using Production Review Pipeline v2.
 
 ==================================================
-PHASE 1: DISCOVERY (METADATA, DIFF & CONTEXT)
+PHASE 1: DISCOVERY (METADATA & CONTEXT)
 ==================================================
-Repository: $OWNER/$REPO_NAME
-Pull Request: $PR_URL
-Commit SHA: $COMMIT_SHA
-Branch: $BRANCH
-PR Title: $PR_TITLE
+Please use your GitHub plugin/tool to read the diff for the PR based on the metadata below.
+EOF
 
-Changed Files:
-$CHANGED_FILES
+printf 'Repository: %s\n' "$OWNER/$REPO_NAME" >> pr_review_prompt.txt
+printf 'Pull Request: %s\n' "$PR_URL" >> pr_review_prompt.txt
+printf 'Commit SHA: %s\n' "$COMMIT_SHA" >> pr_review_prompt.txt
+printf 'Branch: %s\n' "$BRANCH" >> pr_review_prompt.txt
+printf 'PR Title: %s\n' "$PR_TITLE" >> pr_review_prompt.txt
 
-DIFF CONTENT:
-$DIFF_TEXT
-
-RELEVANT CODE CONTEXT:
-$RELEVANT_CONTEXT
+cat << 'EOF' >> pr_review_prompt.txt
 
 ==================================================
 PHASE 2: ANALYSIS (12-POINT SYSTEMATIC PROTOCOL)
@@ -132,17 +124,7 @@ PHASE 4: VALIDATION (BEHAVIOR MATRIX, BLIND-SPOT & DEDUPLICATION)
 ==================================================
 PHASE 5: REPORTING & FINAL VERDICT
 ==================================================
-Do not output REVIEW_STATUS until all 5 phases are complete.
-
-At the very beginning output EXACTLY one of:
-
-REVIEW_STATUS: APPROVED
-
-or
-
-REVIEW_STATUS: CHANGES_REQUESTED
-
-If CHANGES_REQUESTED, output findings using EXACTLY:
+If CHANGES_REQUESTED, output findings using EXACTLY this format:
 
 [FINDING]
 Severity: CRITICAL|HIGH|MEDIUM|LOW
@@ -153,7 +135,47 @@ Failure scenario: <realistic failure scenario>
 Recommended fix: <practical code snippet or implementation approach>
 [/FINDING]
 
-After all findings, optionally provide a short review summary.
+After all findings, provide a concise review summary.
+
+Output Requirements:
+At the VERY END of your response, output EXACTLY one of the following lines based on your verdict:
+REVIEW_STATUS: APPROVED
+or
+REVIEW_STATUS: CHANGES_REQUESTED
+
+Do not put REVIEW_STATUS anywhere else in your response to avoid confusing the parser.
 EOF
 
-echo -e "\n=== DONE - Production Review Pipeline v2 Prompt written to: pr_review_prompt.txt ==="
+# If this is a LOCAL fallback review, GPT has no GitHub PR to fetch from, so we MUST supply the diff.
+if [ "$PR_NUMBER" = "LOCAL" ]; then
+    echo "    [!] LOCAL fallback detected. Appending compact diff directly to prompt..."
+    
+    BASE_COMMIT=$(git merge-base "$BASE_BRANCH" "$BRANCH" 2>/dev/null || echo "HEAD~1")
+    if [ "$BASE_COMMIT" = "HEAD~1" ]; then
+        ACTUAL_DIFF=$(git diff HEAD~1 2>/dev/null || echo "No diff available")
+        CHANGED_FILES=$(git diff --name-only HEAD~1 2>/dev/null || echo "See diff below")
+    else
+        ACTUAL_DIFF=$(git diff "$BASE_COMMIT...$BRANCH" 2>/dev/null || echo "No diff available")
+        CHANGED_FILES=$(git diff --name-only "$BASE_COMMIT...$BRANCH" 2>/dev/null || echo "See diff below")
+    fi
+    
+    echo "$ACTUAL_DIFF" > pr_raw_diff.txt
+    TOTAL_DIFF_LINES=$(echo "$ACTUAL_DIFF" | wc -l)
+    MAX_DIFF_LINES=300
+    COMPACT_DIFF=$(echo "$ACTUAL_DIFF" | head -n "$MAX_DIFF_LINES")
+    TRUNCATION_NOTE=""
+    if [ "$TOTAL_DIFF_LINES" -gt "$MAX_DIFF_LINES" ]; then
+        REMAINING=$((TOTAL_DIFF_LINES - MAX_DIFF_LINES))
+        TRUNCATION_NOTE="[TRUNCATED: $REMAINING more lines not shown. Full diff saved in pr_raw_diff.txt]\n\nIMPORTANT: This diff is truncated.\nDo NOT return APPROVED unless the available diff is sufficient\nto confidently review the change."
+    fi
+
+    printf '\nChanged Files:\n%s\n' "$CHANGED_FILES" >> pr_review_prompt.txt
+    printf '\nCOMPACT GIT DIFF SUMMARY:\n%s\n' "$COMPACT_DIFF" >> pr_review_prompt.txt
+    if [ -n "$TRUNCATION_NOTE" ]; then
+        printf '%b\n' "$TRUNCATION_NOTE" >> pr_review_prompt.txt
+    fi
+    printf '\n[END OF DIFF]\nPlease evaluate the local changes above.\n' >> pr_review_prompt.txt
+fi
+
+echo -e "\n=== DONE - Prompt written to: pr_review_prompt.txt ($(wc -l < pr_review_prompt.txt) lines) ==="
+

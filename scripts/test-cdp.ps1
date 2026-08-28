@@ -22,6 +22,10 @@ Start-Process -FilePath $chromePath -ArgumentList @(
     "--remote-debugging-port=9222",
     "--user-data-dir=`"$chromeDir`"",
     "--no-first-run",
+    "--disable-session-crashed-bubble",
+    "--hide-crash-restore-bubble",
+    "--disable-infobars",
+    "--no-default-browser-check",
     "https://chatgpt.com"
 )
 

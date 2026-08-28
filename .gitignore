@@ -1,4 +1,13 @@
-node_modules/
+# OS / editor
 .DS_Store
+
+# Logs
 *.log
+
+# Generated review artifacts (MUST NOT be tracked by git)
+pr_raw_diff.txt
 pr_review_prompt.txt
+gpt_review_response.txt
+
+# Node
+node_modules/

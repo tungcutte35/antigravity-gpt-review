@@ -24,11 +24,21 @@ else
         exit 1
     fi
 
+    # Reset crashed state in Preferences if present
+    if [ -f "$CHROME_DIR/Default/Preferences" ]; then
+        sed -i 's/"exit_type":"Crashed"/"exit_type":"Normal"/' "$CHROME_DIR/Default/Preferences" 2>/dev/null || true
+        sed -i 's/"exited_cleanly":false/"exited_cleanly":true/' "$CHROME_DIR/Default/Preferences" 2>/dev/null || true
+    fi
+
     # Use setsid to detach process completely from terminal subshell session
     DISPLAY="${DISPLAY:-:0}" setsid "$CHROME_BIN" \
         --remote-debugging-port=9222 \
         --user-data-dir="$CHROME_DIR" \
         --no-first-run \
+        --disable-session-crashed-bubble \
+        --hide-crash-restore-bubble \
+        --disable-infobars \
+        --no-default-browser-check \
         "https://chatgpt.com" </dev/null >/dev/null 2>&1 &
     
     echo "[3] Waiting 4 seconds for Chrome to start..."
